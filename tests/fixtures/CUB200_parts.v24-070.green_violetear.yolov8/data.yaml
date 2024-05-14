@@ -1,0 +1,13 @@
+train: ../train/images
+val: ../valid/images
+test: ../test/images
+
+nc: 10
+names: ['Beak', 'BirdBody', 'Chest', 'Foot', 'GreenBGD', 'Head', 'SkyBGD', 'Tail', 'Wing', 'WoodBGD']
+
+roboflow:
+  workspace: explainableai-lavbv
+  project: cub200_parts
+  version: 24
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/explainableai-lavbv/cub200_parts/dataset/24

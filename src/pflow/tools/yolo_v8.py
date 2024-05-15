@@ -1,8 +1,9 @@
 import os
 from pathlib import Path
 from hashlib import md5
-from typing import List, Tuple, Callable
+from typing import List, Tuple, Callable, Any
 
+import torch
 import yaml
 from PIL import Image as ImagePil
 from ultralytics import YOLO
@@ -11,10 +12,29 @@ import numpy as np
 from skimage.measure import approximate_polygon
 from numpy.typing import NDArray
 
-from pflow.typedef import Annotation, Category, Dataset, Image, DatasetDict
+from pflow.typedef import Annotation, Category, Dataset, Image
+from pflow.polygons import (
+    calculate_center_from_bbox,
+    calculate_center_from_polygon,
+    bbox_from_polygon,
+    polygon_from_bbox,
+)
 
 GROUPS_ALIAS = {"val": "val", "test": "test", "valid": "val", "train": "train"}
 ROUNDING = 6
+
+
+def get_item_from_numpy_or_tensor(element: torch.Tensor | np.ndarray[Any, Any] | Any) -> Any:
+    if isinstance(element, torch.Tensor):
+        # element is a Tensor
+        values = element.numpy().item()
+    elif isinstance(element, np.ndarray):
+        # element is a NumPy array
+        values = element.item()
+    else:
+        # element is neither a Tensor nor a NumPy array
+        values = element
+    return values
 
 
 def get_image_info(image_path: str, group_name: str) -> Image:
@@ -22,7 +42,7 @@ def get_image_info(image_path: str, group_name: str) -> Image:
         width, height = img.size
         image_bytes = img.tobytes()
         size_bytes = len(image_bytes)
-        size_kb = round(size_bytes / 1024, 2)
+        size_kb = int(round(size_bytes / 1024, 2))
         image_hash = md5(image_bytes).hexdigest()
     image: Image = Image(
         id=image_hash,
@@ -36,17 +56,6 @@ def get_image_info(image_path: str, group_name: str) -> Image:
     return image
 
 
-def calculate_center_from_bbox(bbox: Tuple[float, float, float, float]) -> Tuple[float, float]:
-    x1, y1, x2, y2 = bbox
-    return (round((x1 + x2) / 2, ROUNDING), round((y1 + y2) / 2, ROUNDING))
-
-
-def calculate_center_from_polygon(polygon: Tuple[float, ...]) -> Tuple[float, float]:
-    x = [polygon[i] for i in range(0, len(polygon), 2)]
-    y = [polygon[i] for i in range(1, len(polygon), 2)]
-    return (round(sum(x) / len(x), ROUNDING), round(sum(y) / len(y), ROUNDING))
-
-
 def bbox_from_yolo_v8(
     polygon_row: Tuple[float, float, float, float]
 ) -> Tuple[float, float, float, float]:
@@ -57,19 +66,6 @@ def bbox_from_yolo_v8(
         x_center + width / 2,
         y_center + height / 2,
     )
-
-
-def polygon_from_bbox(
-    bbox: Tuple[float, float, float, float]
-) -> Tuple[float, float, float, float, float, float, float, float]:
-    x1, y1, x2, y2 = bbox
-    return (x1, y1, x2, y1, x2, y2, x1, y2)
-
-
-def bbox_from_polygon(polygon: Tuple[float, ...]) -> Tuple[float, float, float, float]:
-    x = [polygon[i] for i in range(0, len(polygon), 2)]
-    y = [polygon[i] for i in range(1, len(polygon), 2)]
-    return (min(x), min(y), max(x), max(y))
 
 
 def process_image_annotations(label_path: str, categories: List[Category]) -> List[Annotation]:
@@ -117,7 +113,9 @@ def process_image_annotations(label_path: str, categories: List[Category]) -> Li
     return annotations
 
 
-def load_yolo_dataset(folder_path: str) -> DatasetDict:
+def load_dataset(folder_path: str) -> Dataset:
+    print()
+    print("Loading dataset from yolo_v8 format in: ", folder_path)
     data_yaml = Path(folder_path) / "data.yaml"
     if not os.path.exists(data_yaml):
         raise ValueError(f"File {data_yaml} does not exist")
@@ -146,12 +144,10 @@ def load_yolo_dataset(folder_path: str) -> DatasetDict:
                     categories,
                 )
                 images.append(image_info)
-        return {
-            "dataset": Dataset(
-                images=images,
-                categories=categories,
-            )
-        }
+        return Dataset(
+            images=images,
+            categories=categories,
+        )
 
 
 def preprocess_image(
@@ -196,11 +192,9 @@ def run_model_on_image(
 ) -> List[Annotation]:
     # We run the model on the image
     image = ImagePil.open(image_path)
-    processed_image = ImagePil.fromarray(
-        preprocess_function(image)
-    )  # type: ignore[no-untyped-call]
+
     results = model.predict(
-        processed_image,
+        preprocess_function(image),
         conf=threshold,
     )
     annotations = []
@@ -209,7 +203,7 @@ def run_model_on_image(
         model_categories = [model_categories[key] for key in sorted(model_categories.keys())]
     for result in results:
         # Segmentation case
-        if result.masks is not None:
+        if result.masks is not None and result.boxes is not None:
             for np_mask, box in zip(result.masks.xyn, result.boxes):
                 category_id = int(box.cls[0])
                 category_name = model_categories[category_id]
@@ -236,14 +230,14 @@ def run_model_on_image(
                         bbox=bbox_from_polygon(simplified_points),
                         segmentation=simplified_points,
                         task="segment",
-                        conf=round(box.conf[0].numpy().item(), ROUNDING),
+                        conf=round(get_item_from_numpy_or_tensor(box.conf[0]), ROUNDING),
                         tags=[add_tag] if add_tag else [],
                     )
                 )
             continue
         # Classification case
         if result.boxes is None and result.probs is not None:
-            for index, prob in enumerate(result.probs.data.numpy().tolist()):
+            for index, prob in enumerate(result.probs.numpy().tolist()):
                 # we get the index of the class with the highest probability
                 if prob < threshold:
                     continue
@@ -253,9 +247,9 @@ def run_model_on_image(
                         id=md5(f"{image_path}_{index}_{prob}".encode()).hexdigest(),
                         category_id=index,
                         category_name=category_name,
-                        center=[],
-                        bbox=[],
-                        segmentation=[],
+                        center=None,
+                        bbox=None,
+                        segmentation=None,
                         task="classification",
                         conf=round(prob, ROUNDING),
                         tags=[add_tag] if add_tag else [],
@@ -267,9 +261,9 @@ def run_model_on_image(
         if result.boxes is not None:
             for box in result.boxes:
                 bbox = tuple(round(x, ROUNDING) for x in box.xyxyn[0].tolist())
-                category_id = int(box.cls.numpy().item())
+                category_id = int(get_item_from_numpy_or_tensor(box.cls))
                 category_name = model_categories[category_id]
-                confidence = round(box.conf.numpy().item(), ROUNDING)
+                confidence = round(get_item_from_numpy_or_tensor(box.conf), ROUNDING)
                 hash_id = md5(
                     (
                         f"{image_path}_{category_id}_{confidence}_{', '.join(str(x) for x in bbox)}"
@@ -301,7 +295,7 @@ def run_model(
     add_tag: str | None = None,
     threshold: float = 0.5,
     segment_tolerance: float = 0.02,
-) -> DatasetDict:
+) -> Dataset:
     model = YOLO(model_path)
     for image in dataset.images:
         model_annotations = run_model_on_image(
@@ -312,4 +306,45 @@ def run_model(
             add_tag=add_tag,
         )
         image.annotations = image.annotations + model_annotations
-    return {"dataset": dataset}
+    return dataset
+
+
+def write(dataset: Dataset, target_dir: str) -> None:
+    target_path = Path(target_dir)
+    target_path.mkdir(parents=True, exist_ok=True)
+    data_yaml = target_path / "data.yaml"
+    with open(data_yaml, "w", encoding="utf-8") as f:
+        yaml.dump(
+            {
+                "names": [category.name for category in dataset.categories],
+                "nc": len(dataset.categories),
+            },
+            f,
+        )
+    total_images: dict[str, int] = {}
+    for image in dataset.images:
+        image_folder = target_path / image.group / "images"
+        image_folder.mkdir(parents=True, exist_ok=True)
+        image_path = image_folder / f"{image.id}.jpg"
+        with ImagePil.open(image.path) as img:
+            img.save(image_path)
+        total_images[image.group] = total_images.get(image.group, 0) + 1
+        label_folder = target_path / image.group / "labels"
+        label_folder.mkdir(parents=True, exist_ok=True)
+        label_path = label_folder / f"{image.id}.txt"
+        with open(label_path, "w", encoding="utf-8") as f:
+            for annotation in image.annotations:
+                if annotation.task == "detect" and annotation.bbox:
+                    f.write(
+                        f"{annotation.category_id} {' '.join(str(x) for x in annotation.bbox)}\n"
+                    )
+                elif annotation.task == "segment" and annotation.segmentation:
+                    polygon_str = " ".join(str(x) for x in annotation.segmentation)
+                    f.write(f"{annotation.category_id} {polygon_str}\n")
+    print()
+    print("Dataset saved as yolo_v8 format in: ", target_dir)
+    print("total images: ", len(dataset.images))
+    print("total images per group:")
+    for group, total in total_images.items():
+        print(f"\t{group}: {total}")
+    print()

@@ -1,7 +1,6 @@
 import os
 from typing import Tuple
 from roboflow import Roboflow
-from pflow.utils import log
 
 
 def parse_url(url: str) -> Tuple[str, str, str]:
@@ -18,14 +17,15 @@ def parse_url(url: str) -> Tuple[str, str, str]:
 
 def download_dataset(url: str, target_dir: str) -> bool:
     if os.path.exists(target_dir):
-        log("roboflow_tools", "download_dataset", "Already downloaded dataset")
+        print()
+        print("Dataset already downloaded")
         return False
 
+    if not os.environ.get("ROBOFLOW_API_KEY"):
+        raise ValueError("ROBOFLOW_API_KEY environment variable not set, add it to .env file.")
     rf = Roboflow(api_key=os.environ["ROBOFLOW_API_KEY"])
     user, project_name, dataset_version = parse_url(url)
 
-    log("roboflow_tools", "download_dataset", "Downloading dataset")
     project = rf.workspace(user).project(project_name)
-    os.makedirs(target_dir, exist_ok=True)
-    project.version(dataset_version).download("yolov8", target_dir)
+    project.version(int(dataset_version)).download("yolov8", target_dir)
     return True

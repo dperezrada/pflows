@@ -1,6 +1,6 @@
 [
   {
-    "task": "yolo_v8.load_yolo_dataset",
+    "task": "yolo_v8.load_dataset",
     "folder_path_relative": "../../tests/fixtures/CUB200_parts.v24-070.green_violetear.yolov8"
   },
   {

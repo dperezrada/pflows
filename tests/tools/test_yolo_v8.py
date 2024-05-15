@@ -8,9 +8,9 @@ from pflow.tools.annotations import filter_by_tag
 model_path = Path(__file__).parent / "yolov8n.pt"
 
 def test_run_model(dataset):
-    sampled_dataset = sample(dataset, number=1, offset=0).get("dataset")
+    sampled_dataset = sample(dataset, number=1, offset=6, sort="id")
     total_initial_annotations = len(sampled_dataset.images[0].annotations)
-    new_dataset = run_model(sampled_dataset, model_path, add_tag="yolov8n").get("dataset")
+    new_dataset = run_model(sampled_dataset, str(model_path), add_tag="yolov8n")
     image_data = new_dataset.images[0]
     assert len(image_data.annotations) > total_initial_annotations
     filter_annotations = filter_by_tag(image_data.annotations, "yolov8n")

@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 
-from typing import List, Tuple, TypedDict
+from typing import List, Tuple
 
 
 @dataclass
@@ -13,11 +13,11 @@ class Category:
 
 @dataclass
 class Annotation:
-    id: int
+    id: str
     category_id: int
-    center: Tuple[float, float]
-    bbox: Tuple[float, float, float, float]
-    segmentation: Tuple[float]
+    center: Tuple[float, float] | None
+    bbox: Tuple[float, float, float, float] | None
+    segmentation: Tuple[float, ...] | None
     task: str
     conf: float = -1.0
     category_name: str = ""
@@ -26,7 +26,7 @@ class Annotation:
 
 @dataclass
 class Image:
-    id: int
+    id: str
     path: str
     intermediate_ids: List[int]
     width: int
@@ -40,7 +40,3 @@ class Image:
 class Dataset:
     images: List[Image]
     categories: List[Category]
-
-
-class DatasetDict(TypedDict):
-    dataset: Dataset

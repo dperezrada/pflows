@@ -1,0 +1,53 @@
+[
+  {
+    "task": "roboflow_tools.download_dataset",
+    "target_dir": "{{BASE_FOLDER}}/datasets/downloaded/cub200_parts-50",
+    "url": "https://universe.roboflow.com/explainableai-lavbv/cub200_parts/dataset/50"
+  },
+  {
+    "task": "yolo_v8.load_dataset",
+    "folder_path": "{{BASE_FOLDER}}/datasets/downloaded/cub200_parts-50"
+  },
+  {
+    "task": "base.count_images"
+  },
+  {
+    "task": "base.count_categories"
+  },
+  {
+    "task": "categories.group_categories",
+    "groups": {
+      "upper": [["eye", "bill", "head", "nape", "throat"]],
+      "lower": [["belly", "feet", "tail"]],
+      "middle": [["Wing", "breast", "back"]],
+      "Wing": [["Wing"]],
+      "back": [["back"]],
+      "belly": [["belly"]],
+      "bill": [["bill"]],
+      "eye": [["eye"]],
+      "feet": [["feet"]],
+      "head": [["head"]],
+      "nape": [["nape"]],
+      "tail": [["tail"]],
+      "throat": [["throat"]]
+    },
+    "condition": "any"
+  },
+  {
+    "task": "categories.keep",
+    "categories": ["upper", "lower", "middle"]
+  },
+  {
+    "task": "base.count_images"
+  },
+  {
+    "task": "base.count_categories"
+  },
+  {
+    "task": "base.show_categories"
+  },
+  {
+    "task": "yolo_v8.write",
+    "target_dir": "{{BASE_FOLDER}}/datasets/processed/birds-grouped-categories-cub200_parts-50"
+  }
+]

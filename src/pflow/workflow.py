@@ -36,6 +36,18 @@ def load_function(task_name: str) -> Tuple[Any, Dict[str, Dict[str, str | bool]]
     return task_function, params
 
 
+def replace_variables(text: str) -> str:
+    # we are going to search for {{variable}} and replace it with the value of the variable
+    # we are going to use a regular expression to find all the variables
+    matches = re.findall(r"\{\{([a-zA-Z0-9_]+)\}\}", text)
+    for match in matches:
+        value = os.getenv(match)
+        if value is None:
+            raise ValueError(f"The variable '{match}' is not defined.")
+        text = text.replace(f"{{{{{match}}}}}", value)
+    return text
+
+
 # pylint: disable=too-many-locals
 def read_workflow(workflow_path: str) -> Tuple[List[TaskObj], Dict[str, Any]]:
     # Load the workflow and check is a valid JSON
@@ -44,7 +56,9 @@ def read_workflow(workflow_path: str) -> Tuple[List[TaskObj], Dict[str, Any]]:
 
     with open(workflow_path, "r", encoding="utf-8") as f:
         try:
-            workflow = json.load(f)
+            workflow_text = f.read()
+            workflow_text = replace_variables(workflow_text)
+            workflow = json.loads(workflow_text)
         except json.JSONDecodeError as exc:
             raise ValueError("The workflow file is not a valid JSON file.") from exc
 
@@ -79,7 +93,9 @@ def read_workflow(workflow_path: str) -> Tuple[List[TaskObj], Dict[str, Any]]:
                 if param in workflow_data:
                     task_args[param] = "__workflow_parameter__"
                     continue
-                raise ValueError(f"The parameter '{param}' is required for task {index +1}.")
+                raise ValueError(
+                    f"The parameter '{param}' is required for task {index +1}: {task['task']}."
+                )
         # check if there are any extra parameters
         for param in task_args:
             if param not in params:
@@ -95,7 +111,8 @@ def run_workflow(workflow_path: str) -> Dict[str, Any]:
     # Load the workflow and check is a valid JSON
     workflow, workflow_data = read_workflow(workflow_path)
     for task in workflow:
-        print("running task", task["task"])
+        print("")
+        print("-" * 20, task["task"], "-" * 20)
         params = {
             param: (
                 task["_params"][param]
@@ -107,4 +124,6 @@ def run_workflow(workflow_path: str) -> Dict[str, Any]:
         result = task["_function"](**params)
         if result is not None and isinstance(result, dict):
             workflow_data.update(result)
+        if result is not None and isinstance(result, Dataset):
+            workflow_data["dataset"] = result
     return workflow_data

@@ -4,8 +4,11 @@ import json
 import argparse
 from dataclasses import asdict, is_dataclass
 from typing import Dict, Any
+from dotenv import load_dotenv
 
 from pflow.workflow import run_workflow
+
+load_dotenv()
 
 
 def format_output(output_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -35,8 +38,6 @@ def main() -> None:
         if output_json:
             with open(output_json, "w", encoding="utf-8") as f:
                 f.write(json.dumps(formatted_output, indent=4))
-        else:
-            print(formatted_output)
     except Exception as e:
         raise e
         # print(f"An error occurred: {e}")

@@ -34,9 +34,11 @@ class Image:
     size_kb: int
     group: str
     annotations: List[Annotation] = field(default_factory=list)
+    tags: List[str] = field(default_factory=list)
 
 
 @dataclass
 class Dataset:
     images: List[Image]
     categories: List[Category]
+    groups: List[str]

@@ -29,21 +29,29 @@ def load_function_args(function: Callable[..., Any]) -> Dict[str, Dict[str, str 
 
 
 def load_function(task_name: str) -> Tuple[Any, Dict[str, Dict[str, str | bool]]]:
-    task_file, task_function_name = task_name.split(".")
-    task_module = __import__(f"pflow.tools.{task_file}", fromlist=[task_function_name])
-    task_function = getattr(task_module, task_function_name)
-    params = load_function_args(task_function)
+    try:
+        task_file, task_function_name = task_name.split(".")
+        task_module = __import__(f"pflow.tools.{task_file}", fromlist=[task_function_name])
+        task_function = getattr(task_module, task_function_name)
+        params = load_function_args(task_function)
+    except Exception as exc:
+        print(f"Error loading task: {task_name}", exc)
+        raise ValueError(f"The task '{task_name}' is not a valid task.") from exc
+
     return task_function, params
 
 
-def replace_variables(text: str) -> str:
+def replace_variables(text: str, current_dir: str) -> str:
     # we are going to search for {{variable}} and replace it with the value of the variable
     # we are going to use a regular expression to find all the variables
     matches = re.findall(r"\{\{([a-zA-Z0-9_]+)\}\}", text)
     for match in matches:
         value = os.getenv(match)
         if value is None:
-            raise ValueError(f"The variable '{match}' is not defined.")
+            if match == "CURRENT_DIR":
+                value = current_dir
+            else:
+                raise ValueError(f"The variable '{match}' is not defined.")
         text = text.replace(f"{{{{{match}}}}}", value)
     return text
 
@@ -53,18 +61,18 @@ def read_workflow(workflow_path: str) -> Tuple[List[TaskObj], Dict[str, Any]]:
     # Load the workflow and check is a valid JSON
     if not os.path.exists(workflow_path):
         raise FileNotFoundError("The workflow file does not exist.")
-
+    workflow_dir = os.path.abspath(os.path.dirname(workflow_path))
     with open(workflow_path, "r", encoding="utf-8") as f:
         try:
             workflow_text = f.read()
-            workflow_text = replace_variables(workflow_text)
+            workflow_text = replace_variables(workflow_text, workflow_dir)
             workflow = json.loads(workflow_text)
         except json.JSONDecodeError as exc:
             raise ValueError("The workflow file is not a valid JSON file.") from exc
 
     workflow_basepath = os.path.abspath(os.path.dirname(workflow_path))
 
-    workflow_data = {"dataset": Dataset(images=[], categories=[])}
+    workflow_data = {"dataset": Dataset(images=[], categories=[], groups=[])}
     for index, task in enumerate(workflow):
         if "task" not in task:
             raise ValueError(f"The 'task' key is missing in one of the task {index +1}.")

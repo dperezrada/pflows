@@ -110,4 +110,5 @@ ENV/
 
 .DS_Store
 dani-workflows/
-
+runs/
+*.pt

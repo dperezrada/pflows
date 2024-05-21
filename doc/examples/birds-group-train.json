@@ -48,6 +48,14 @@
   },
   {
     "task": "yolo_v8.write",
-    "target_dir": "{{BASE_FOLDER}}/datasets/processed/birds-grouped-categories-cub200_parts-50"
+    "target_dir": "{{BASE_FOLDER}}/datasets/processed/birds-grouped-categories-cub200_parts-50",
+    "pre_process_images": true
+  },
+  {
+    "task": "yolo_v8.train",
+    "model_name": "https://github.com/ultralytics/assets/releases/download/v8.2.0/yolov8n-seg.pt",
+    "epochs": 10,
+    "data_file": "{{BASE_FOLDER}}/datasets/processed/birds-grouped-categories-cub200_parts-50/data.yaml",
+    "model_output": "{{BASE_FOLDER}}/models/birds-grouped-categories-cub200_parts-50-seg.pt"
   }
 ]

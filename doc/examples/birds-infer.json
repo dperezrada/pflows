@@ -1,0 +1,17 @@
+[
+  {
+    "task": "base.load_images",
+    "path": "{{CURRENT_DIR}}/../../tests/fixtures/CUB200_parts.v24-070.green_violetear.yolov8/train/images"
+  },
+  {
+    "task": "base.count_images"
+  },
+  {
+    "task": "yolo_v8.infer",
+    "model": "yolov8n.pt"
+  },
+  {
+    "task": "yolo_v8.write",
+    "target_dir": "{{BASE_FOLDER}}/datasets/infer/birds-grouped-categories-cub200_parts-50-1"
+  }
+]

@@ -67,11 +67,12 @@ def keep(dataset: Dataset, categories: list[str]) -> Dataset:
             if any(annotation.category_name in categories for annotation in image.annotations)
         ],
         categories=new_categories,
+        groups=dataset.groups,
     )
 
 
 def group_categories(
-    dataset: Dataset, groups: dict[str, Sequence[Sequence[str]]], condition: str
+    dataset: Dataset, groups: dict[str, Sequence[Sequence[str]]], condition: str = "any"
 ) -> Dataset:
     """
     Groups annotations in a dataset based on the provided category groups.
@@ -81,6 +82,9 @@ def group_categories(
         groups: A dictionary specifying the category groups. The keys represent the new category
                 names, and the values are lists of lists, where each inner list contains the
                 categories to be grouped together.
+        condition: "any" or "all". If "any", the annotations will be grouped if they have at least
+                one category in common. If "all", the annotations will be grouped only if they
+                have all categories in common. Default is "any".
 
     Returns:
         A new dataset with the annotations grouped according to the specified category groups.
@@ -187,4 +191,5 @@ def group_categories(
             )
             for index, name in enumerate(categories_names)
         ],
+        groups=dataset.groups,
     )

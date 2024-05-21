@@ -12,13 +12,14 @@ import numpy as np
 from skimage.measure import approximate_polygon
 from numpy.typing import NDArray
 
-from pflow.typedef import Annotation, Category, Dataset, Image
+from pflow.typedef import Annotation, Category, Dataset
 from pflow.polygons import (
     calculate_center_from_bbox,
     calculate_center_from_polygon,
     bbox_from_polygon,
     polygon_from_bbox,
 )
+from pflow.model import get_image_info
 
 GROUPS_ALIAS = {"val": "val", "test": "test", "valid": "val", "train": "train"}
 ROUNDING = 6
@@ -37,35 +38,25 @@ def get_item_from_numpy_or_tensor(element: torch.Tensor | np.ndarray[Any, Any] |
     return values
 
 
-def get_image_info(image_path: str, group_name: str) -> Image:
-    with ImagePil.open(image_path) as img:
-        width, height = img.size
-        image_bytes = img.tobytes()
-        size_bytes = len(image_bytes)
-        size_kb = int(round(size_bytes / 1024, 2))
-        image_hash = md5(image_bytes).hexdigest()
-    image: Image = Image(
-        id=image_hash,
-        intermediate_ids=[],
-        path=str(image_path),
-        width=width,
-        height=height,
-        size_kb=size_kb,
-        group=group_name,
-    )
-    return image
-
-
 def bbox_from_yolo_v8(
     polygon_row: Tuple[float, float, float, float]
 ) -> Tuple[float, float, float, float]:
     x_center, y_center, width, height = polygon_row
     return (
-        x_center - width / 2,
-        y_center - height / 2,
-        x_center + width / 2,
-        y_center + height / 2,
+        round(x_center - width / 2, ROUNDING),
+        round(y_center - height / 2, ROUNDING),
+        round(x_center + width / 2, ROUNDING),
+        round(y_center + height / 2, ROUNDING),
     )
+
+
+def yolov8_from_bbox(bbox: Tuple[float, float, float, float]) -> Tuple[float, float, float, float]:
+    x1, y1, x2, y2 = bbox
+    width = x2 - x1
+    height = y2 - y1
+    x_center = x1 + width / 2
+    y_center = y1 + height / 2
+    return x_center, y_center, width, height
 
 
 def process_image_annotations(label_path: str, categories: List[Category]) -> List[Annotation]:
@@ -91,7 +82,7 @@ def process_image_annotations(label_path: str, categories: List[Category]) -> Li
                         id=md5_hash,
                         category_id=category_id,
                         category_name=categories[category_id].name,
-                        center=calculate_center_from_bbox(bbox_row_tuple),
+                        center=calculate_center_from_bbox(bbox),
                         bbox=bbox,
                         segmentation=polygon_from_bbox(bbox),
                         task="detect",
@@ -119,7 +110,6 @@ def load_dataset(folder_path: str) -> Dataset:
     data_yaml = Path(folder_path) / "data.yaml"
     if not os.path.exists(data_yaml):
         raise ValueError(f"File {data_yaml} does not exist")
-
     with open(data_yaml, "r", encoding="utf-8") as f:
         data = yaml.load(f, Loader=yaml.FullLoader)
         categories = [Category(name=str(x), id=i) for i, x in enumerate(data["names"])]
@@ -147,6 +137,7 @@ def load_dataset(folder_path: str) -> Dataset:
         return Dataset(
             images=images,
             categories=categories,
+            groups=list(groups.keys()),
         )
 
 
@@ -185,6 +176,7 @@ def preprocess_image(
 def run_model_on_image(
     image_path: str,
     model: YOLO,
+    model_categories: List[str] | None = None,
     threshold: float = 0.5,
     segment_tolerance: float = 0.02,
     preprocess_function: Callable[[ImagePil.Image], NDArray[np.uint8]] = preprocess_image,
@@ -198,9 +190,11 @@ def run_model_on_image(
         conf=threshold,
     )
     annotations = []
-    model_categories = model.names
-    if isinstance(model_categories, dict):
-        model_categories = [model_categories[key] for key in sorted(model_categories.keys())]
+    yolo_categories = model.names
+    if isinstance(yolo_categories, dict):
+        yolo_categories = [yolo_categories[key] for key in sorted(yolo_categories.keys())]
+    if model_categories is None:
+        model_categories = yolo_categories
     for result in results:
         # Segmentation case
         if result.masks is not None and result.boxes is not None:
@@ -309,16 +303,19 @@ def run_model(
     return dataset
 
 
-def write(dataset: Dataset, target_dir: str) -> None:
+def write(dataset: Dataset, target_dir: str, pre_process_images: bool = False) -> None:
     target_path = Path(target_dir)
     target_path.mkdir(parents=True, exist_ok=True)
-    data_yaml = target_path / "data.yaml"
-    with open(data_yaml, "w", encoding="utf-8") as f:
+    data_yaml_path = target_path / "data.yaml"
+    data_for_yaml = {
+        "names": [category.name for category in dataset.categories],
+        "nc": len(dataset.categories),
+    }
+    for group in dataset.groups:
+        data_for_yaml[group] = f"./{group}/images"
+    with open(data_yaml_path, "w", encoding="utf-8") as f:
         yaml.dump(
-            {
-                "names": [category.name for category in dataset.categories],
-                "nc": len(dataset.categories),
-            },
+            data_for_yaml,
             f,
         )
     total_images: dict[str, int] = {}
@@ -327,7 +324,11 @@ def write(dataset: Dataset, target_dir: str) -> None:
         image_folder.mkdir(parents=True, exist_ok=True)
         image_path = image_folder / f"{image.id}.jpg"
         with ImagePil.open(image.path) as img:
-            img.save(image_path)
+            if pre_process_images:
+                new_image = preprocess_image(img)
+                ImagePil.fromarray(new_image).save(image_path)  # type: ignore
+            else:
+                img.save(image_path)
         total_images[image.group] = total_images.get(image.group, 0) + 1
         label_folder = target_path / image.group / "labels"
         label_folder.mkdir(parents=True, exist_ok=True)
@@ -335,9 +336,8 @@ def write(dataset: Dataset, target_dir: str) -> None:
         with open(label_path, "w", encoding="utf-8") as f:
             for annotation in image.annotations:
                 if annotation.task == "detect" and annotation.bbox:
-                    f.write(
-                        f"{annotation.category_id} {' '.join(str(x) for x in annotation.bbox)}\n"
-                    )
+                    yolo_bbox = yolov8_from_bbox(annotation.bbox)
+                    f.write(f"{annotation.category_id} {' '.join(str(x) for x in yolo_bbox)}\n")
                 elif annotation.task == "segment" and annotation.segmentation:
                     polygon_str = " ".join(str(x) for x in annotation.segmentation)
                     f.write(f"{annotation.category_id} {polygon_str}\n")
@@ -347,4 +347,60 @@ def write(dataset: Dataset, target_dir: str) -> None:
     print("total images per group:")
     for group, total in total_images.items():
         print(f"\t{group}: {total}")
-    print()
+
+
+def check_device() -> str:
+    if torch.backends.mps.is_available():
+        device = "mps"
+    else:
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+    return device
+
+
+def train(
+    dataset: Dataset,
+    data_file: str,
+    model_name: str,
+    model_output: str,
+    epochs: int = 100,
+    batch_size: int = 8,
+) -> Dataset:
+    model = YOLO(model_name)
+    device = check_device()
+    print("Training on device: ", device)
+
+    results = model.train(
+        data=data_file,
+        epochs=epochs,
+        batch=batch_size,
+        imgsz=640,
+        device=device,
+    )
+    if results is None:
+        print("Training failed")
+        return dataset
+    # Save the model
+    current_model_location = Path(results.save_dir) / "weights" / "best.pt"
+    model_output_dir = Path(model_output).parent
+    model_output_dir.mkdir(parents=True, exist_ok=True)
+    current_model_location.rename(model_output)
+    return dataset
+
+
+def infer(dataset: Dataset, model: str) -> Dataset:
+    yolo_model = YOLO(model)
+    new_categories = dataset.categories
+    new_categories_names = [category.name for category in new_categories]
+    yolo_categories = yolo_model.names
+    if isinstance(yolo_categories, dict):
+        yolo_categories = [yolo_categories[key] for key in sorted(yolo_categories.keys())]
+    for category in yolo_categories:
+        if category not in new_categories_names:
+            new_categories.append(Category(name=category, id=len(new_categories)))
+            new_categories_names.append(category)
+
+    for image in dataset.images:
+        model_annotations = run_model_on_image(image.path, yolo_model, new_categories_names)
+        image.annotations = image.annotations + model_annotations
+    dataset.categories = new_categories
+    return dataset

@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 
-from typing import List, Tuple
+from typing import Any, Callable, Dict, List, Tuple
 
 
 @dataclass
@@ -42,3 +42,10 @@ class Dataset:
     images: List[Image]
     categories: List[Category]
     groups: List[str]
+
+
+@dataclass
+class Task:
+    task: str
+    function: Callable[..., Any]
+    params: Dict[str, Any]

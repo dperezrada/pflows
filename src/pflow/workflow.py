@@ -3,14 +3,8 @@ import re
 import json
 import inspect
 
-from typing import Tuple, Dict, Any, Callable, TypedDict, List
-from pflow.typedef import Dataset
-
-
-class TaskObj(TypedDict):
-    task: str
-    _function: Callable[..., Any]
-    _params: Dict[str, Any]
+from typing import Tuple, Dict, Any, Callable, List
+from pflow.typedef import Dataset, Task
 
 
 def load_function_args(function: Callable[..., Any]) -> Dict[str, Dict[str, str | bool]]:
@@ -47,7 +41,7 @@ def replace_variables(text: str, current_dir: str) -> str:
     matches = re.findall(r"\{\{([a-zA-Z0-9_]+)\}\}", text)
     for match in matches:
         value = os.getenv(match)
-        if value is None:
+        if value is None or value == "":
             if match == "CURRENT_DIR":
                 value = current_dir
             else:
@@ -57,7 +51,7 @@ def replace_variables(text: str, current_dir: str) -> str:
 
 
 # pylint: disable=too-many-locals,too-many-branches
-def read_workflow(workflow_path: str) -> Tuple[List[TaskObj], Dict[str, Any]]:
+def read_workflow(workflow_path: str) -> Tuple[List[Task], Dict[str, Any]]:
     # Load the workflow and check is a valid JSON
     if not os.path.exists(workflow_path):
         raise FileNotFoundError("The workflow file does not exist.")
@@ -88,15 +82,15 @@ def read_workflow(workflow_path: str) -> Tuple[List[TaskObj], Dict[str, Any]]:
     workflow_basepath = os.path.abspath(os.path.dirname(workflow_path))
 
     workflow_data = {"dataset": Dataset(images=[], categories=[], groups=[])}
-    for index, task in enumerate(workflow):
-        if "task" not in task:
+    workflow_reviewed_tasks: List[Task] = []
+    for index, raw_task in enumerate(workflow):
+        if "task" not in raw_task:
             raise ValueError(f"The 'task' key is missing in one of the task {index +1}.")
-        task_name = task["task"]
-        task_args = task.copy()
+        task_name = raw_task["task"]
+        task_args = raw_task.copy()
         del task_args["task"]
 
         task_function, params = load_function(task_name)
-        task["_function"] = task_function
         # check if all required parameters are present
         for param, info in params.items():
             if info["required"] and param not in task_args:
@@ -117,7 +111,7 @@ def read_workflow(workflow_path: str) -> Tuple[List[TaskObj], Dict[str, Any]]:
                     task_args[param] = "__workflow_parameter__"
                     continue
                 raise ValueError(
-                    f"The parameter '{param}' is required for task {index +1}: {task['task']}."
+                    f"The parameter '{param}' is required for task {index +1}: {raw_task['task']}."
                 )
         # check if there are any extra parameters
         for param in task_args:
@@ -126,8 +120,10 @@ def read_workflow(workflow_path: str) -> Tuple[List[TaskObj], Dict[str, Any]]:
                     task_args[param] = workflow_data[param]
                     continue
                 raise ValueError(f"The parameter '{param}' is not valid for task {index +1}.")
-        task["_params"] = task_args
-    return workflow, workflow_data
+        task = Task(task=task_name, function=task_function, params=task_args)
+        workflow_reviewed_tasks.append(task)
+
+    return workflow_reviewed_tasks, workflow_data
 
 
 def run_workflow(workflow_path: str) -> Dict[str, Any]:
@@ -135,16 +131,16 @@ def run_workflow(workflow_path: str) -> Dict[str, Any]:
     workflow, workflow_data = read_workflow(workflow_path)
     for task in workflow:
         print("")
-        print("-" * 20, task["task"], "-" * 20)
+        print("-" * 20, task.task, "-" * 20)
         params = {
             param: (
-                task["_params"][param]
-                if task["_params"][param] != "__workflow_parameter__"
+                task.params[param]
+                if task.params[param] != "__workflow_parameter__"
                 else workflow_data[param]
             )
-            for param in task["_params"]
+            for param in task.params
         }
-        result = task["_function"](**params)
+        result = task.function(**params)
         if result is not None and isinstance(result, dict):
             workflow_data.update(result)
         if result is not None and isinstance(result, Dataset):

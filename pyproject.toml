@@ -17,17 +17,11 @@ classifiers = [
 
 ]
 license = {text = "MIT license"}
-dependencies = [
-  "typer"
-]
+dynamic = ["dependencies", "optional-dependencies"]
 
-[project.optional-dependencies]
-dev = [
-    "coverage",  # testing
-    "mypy",  # linting
-    "pytest",  # testing
-    "ruff"  # linting
-]
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+optional-dependencies = {dev = { file = ["requirements_dev.txt"] }}
 
 [project.urls]
 

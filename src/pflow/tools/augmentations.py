@@ -157,7 +157,7 @@ def generate_augmented_image(
             new_polygons = []
             raise ValueError("Different number of polygons")
     # pylint: disable=broad-exception-caught
-    except Exception as e:
+    except Exception:
         return None
 
     if len(new_polygons) == 0:

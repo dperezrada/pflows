@@ -56,19 +56,34 @@ def replace_variables(text: str, current_dir: str) -> str:
     return text
 
 
-# pylint: disable=too-many-locals
+# pylint: disable=too-many-locals,too-many-branches
 def read_workflow(workflow_path: str) -> Tuple[List[TaskObj], Dict[str, Any]]:
     # Load the workflow and check is a valid JSON
     if not os.path.exists(workflow_path):
         raise FileNotFoundError("The workflow file does not exist.")
     workflow_dir = os.path.abspath(os.path.dirname(workflow_path))
+
     with open(workflow_path, "r", encoding="utf-8") as f:
         try:
             workflow_text = f.read()
-            workflow_text = replace_variables(workflow_text, workflow_dir)
             workflow = json.loads(workflow_text)
         except json.JSONDecodeError as exc:
             raise ValueError("The workflow file is not a valid JSON file.") from exc
+
+    non_set_env_tasks_found = False
+    workflow_tasks = []
+    for index, task in enumerate(workflow):
+        if task["task"] == "set_env_var":
+            if non_set_env_tasks_found:
+                raise ValueError("set_env_var tasks must be the first tasks in the workflow.")
+            os.environ[task["name"]] = task["value"]
+            continue
+        workflow_tasks.append(task)
+        non_set_env_tasks_found = True
+
+    workflow_text = json.dumps(workflow_tasks)
+    workflow_text = replace_variables(workflow_text, workflow_dir)
+    workflow = json.loads(workflow_text)
 
     workflow_basepath = os.path.abspath(os.path.dirname(workflow_path))
 

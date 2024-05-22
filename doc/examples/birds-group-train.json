@@ -1,12 +1,12 @@
 [
   {
     "task": "roboflow_tools.download_dataset",
-    "target_dir": "{{BASE_FOLDER}}/datasets/downloaded/cub200_parts-50",
+    "target_dir": "{{BASE_FOLDER}}/pflow-example/datasets/downloaded/cub200_parts-50",
     "url": "https://universe.roboflow.com/explainableai-lavbv/cub200_parts/dataset/50"
   },
   {
     "task": "yolo_v8.load_dataset",
-    "folder_path": "{{BASE_FOLDER}}/datasets/downloaded/cub200_parts-50"
+    "folder_path": "{{BASE_FOLDER}}/pflow-example/datasets/downloaded/cub200_parts-50"
   },
   {
     "task": "base.count_images"
@@ -41,6 +41,10 @@
     "task": "base.count_images"
   },
   {
+    "task": "augmentations.generic",
+    "number": 5
+  },
+  {
     "task": "base.count_categories"
   },
   {
@@ -48,14 +52,14 @@
   },
   {
     "task": "yolo_v8.write",
-    "target_dir": "{{BASE_FOLDER}}/datasets/processed/birds-grouped-categories-cub200_parts-50",
+    "target_dir": "{{BASE_FOLDER}}/pflow-example/datasets/processed/birds-grouped-categories-cub200_parts-50",
     "pre_process_images": true
   },
   {
     "task": "yolo_v8.train",
     "model_name": "https://github.com/ultralytics/assets/releases/download/v8.2.0/yolov8n-seg.pt",
     "epochs": 10,
-    "data_file": "{{BASE_FOLDER}}/datasets/processed/birds-grouped-categories-cub200_parts-50/data.yaml",
-    "model_output": "{{BASE_FOLDER}}/models/birds-grouped-categories-cub200_parts-50-seg.pt"
+    "data_file": "{{BASE_FOLDER}}/pflow-example/datasets/processed/birds-grouped-categories-cub200_parts-50/data.yaml",
+    "model_output": "{{BASE_FOLDER}}/pflow-example/models/birds-grouped-categories-cub200_parts-50-seg.pt"
   }
 ]

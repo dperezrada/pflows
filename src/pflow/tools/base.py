@@ -1,4 +1,5 @@
 import os
+import sys
 import glob
 from typing import List
 from pathlib import Path
@@ -97,3 +98,7 @@ def load_images(
     if "train" not in dataset.groups:
         dataset.groups += groups
     return dataset
+
+
+def terminate() -> None:
+    sys.exit(0)

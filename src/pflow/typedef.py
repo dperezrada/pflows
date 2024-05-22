@@ -28,7 +28,7 @@ class Annotation:
 class Image:
     id: str
     path: str
-    intermediate_ids: List[int]
+    intermediate_ids: List[str]
     width: int
     height: int
     size_kb: int

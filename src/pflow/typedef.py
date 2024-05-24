@@ -49,3 +49,4 @@ class Task:
     task: str
     function: Callable[..., Any]
     params: Dict[str, Any]
+    skip: bool = False

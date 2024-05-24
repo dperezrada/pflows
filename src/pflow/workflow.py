@@ -3,7 +3,7 @@ import re
 import json
 import inspect
 
-from typing import Tuple, Dict, Any, Callable, List
+from typing import Sequence, Tuple, Dict, Any, Callable, List
 from pflow.typedef import Dataset, Task
 
 
@@ -35,14 +35,14 @@ def load_function(task_name: str) -> Tuple[Any, Dict[str, Dict[str, str | bool]]
     return task_function, params
 
 
-def replace_variables(text: str, current_dir: str) -> str:
+def replace_variables(text: str, current_dir: str | None = None) -> str:
     # we are going to search for {{variable}} and replace it with the value of the variable
     # we are going to use a regular expression to find all the variables
     matches = re.findall(r"\{\{([a-zA-Z0-9_]+)\}\}", text)
     for match in matches:
         value = os.getenv(match)
         if value is None or value == "":
-            if match == "CURRENT_DIR":
+            if match == "CURRENT_DIR" and current_dir is not None:
                 value = current_dir
             else:
                 raise ValueError(f"The variable '{match}' is not defined.")
@@ -51,22 +51,20 @@ def replace_variables(text: str, current_dir: str) -> str:
 
 
 # pylint: disable=too-many-locals,too-many-branches
-def read_workflow(workflow_path: str) -> Tuple[List[Task], Dict[str, Any]]:
-    # Load the workflow and check is a valid JSON
-    if not os.path.exists(workflow_path):
-        raise FileNotFoundError("The workflow file does not exist.")
-    workflow_dir = os.path.abspath(os.path.dirname(workflow_path))
-
-    with open(workflow_path, "r", encoding="utf-8") as f:
-        try:
-            workflow_text = f.read()
-            workflow = json.loads(workflow_text)
-        except json.JSONDecodeError as exc:
-            raise ValueError("The workflow file is not a valid JSON file.") from exc
+def read_workflow(
+    workflow_path: str | None = None, raw_workflow: Sequence[Dict[str, Any]] | None = None
+) -> Tuple[Sequence[Task], Dict[str, Any]]:
+    if workflow_path is None and raw_workflow is None:
+        raise ValueError("You must provide a workflow path or a workflow.")
+    workflow_dir = None
+    if workflow_path is not None:
+        raw_workflow, workflow_dir = read_local_workflow(workflow_path)
+    if raw_workflow is None:
+        raise ValueError("You must provide a workflow path or a workflow.")
 
     non_set_env_tasks_found = False
     workflow_tasks = []
-    for index, task in enumerate(workflow):
+    for index, task in enumerate(raw_workflow):
         if task["task"] == "set_env_var":
             if non_set_env_tasks_found:
                 raise ValueError("set_env_var tasks must be the first tasks in the workflow.")
@@ -79,8 +77,6 @@ def read_workflow(workflow_path: str) -> Tuple[List[Task], Dict[str, Any]]:
     workflow_text = replace_variables(workflow_text, workflow_dir)
     workflow = json.loads(workflow_text)
 
-    workflow_basepath = os.path.abspath(os.path.dirname(workflow_path))
-
     workflow_data = {"dataset": Dataset(images=[], categories=[], groups=[])}
     workflow_reviewed_tasks: List[Task] = []
     for index, raw_task in enumerate(workflow):
@@ -91,6 +87,7 @@ def read_workflow(workflow_path: str) -> Tuple[List[Task], Dict[str, Any]]:
         del task_args["task"]
 
         task_function, params = load_function(task_name)
+        skip_task = False
         # check if all required parameters are present
         for param, info in params.items():
             if info["required"] and param not in task_args:
@@ -100,10 +97,10 @@ def read_workflow(workflow_path: str) -> Tuple[List[Task], Dict[str, Any]]:
                     if task_param.endswith("_relative")
                     and re.sub(r"_relative$", "", task_param) == param
                 ]
-                if len(possible_relatives) > 0:
+                if len(possible_relatives) > 0 and workflow_dir is not None:
                     relative_param = possible_relatives[0]
                     task_args[param] = os.path.abspath(
-                        os.path.join(workflow_basepath, task_args[relative_param])
+                        os.path.join(workflow_dir, task_args[relative_param])
                     )
                     del task_args[relative_param]
                     continue
@@ -113,6 +110,10 @@ def read_workflow(workflow_path: str) -> Tuple[List[Task], Dict[str, Any]]:
                 raise ValueError(
                     f"The parameter '{param}' is required for task {index +1}: {raw_task['task']}."
                 )
+        if "skip" in task_args:
+            skip_task = True
+            del task_args["skip"]
+
         # check if there are any extra parameters
         for param in task_args:
             if param not in params:
@@ -120,18 +121,37 @@ def read_workflow(workflow_path: str) -> Tuple[List[Task], Dict[str, Any]]:
                     task_args[param] = workflow_data[param]
                     continue
                 raise ValueError(f"The parameter '{param}' is not valid for task {index +1}.")
-        task = Task(task=task_name, function=task_function, params=task_args)
+        task = Task(task=task_name, function=task_function, params=task_args, skip=skip_task)
         workflow_reviewed_tasks.append(task)
 
     return workflow_reviewed_tasks, workflow_data
 
 
-def run_workflow(workflow_path: str) -> Dict[str, Any]:
+def read_local_workflow(workflow_path: str) -> Tuple[Sequence[Dict[str, Any]], str]:
     # Load the workflow and check is a valid JSON
-    workflow, workflow_data = read_workflow(workflow_path)
+    if not os.path.exists(workflow_path):
+        raise FileNotFoundError("The workflow file does not exist.")
+    workflow_dir = os.path.abspath(os.path.dirname(workflow_path))
+
+    with open(workflow_path, "r", encoding="utf-8") as f:
+        try:
+            workflow_text = f.read()
+            workflow = json.loads(workflow_text)
+        except json.JSONDecodeError as exc:
+            raise ValueError("The workflow file is not a valid JSON file.") from exc
+    return workflow, workflow_dir
+
+
+def run_workflow(
+    workflow_path: str | None = None, raw_workflow: Sequence[Dict[str, Any]] | None = None
+) -> Dict[str, Any]:
+    workflow, workflow_data = read_workflow(workflow_path, raw_workflow)
     for task in workflow:
         print("")
         print("-" * 20, task.task, "-" * 20)
+        if task.skip:
+            print("Skipping task.")
+            continue
         params = {
             param: (
                 task.params[param]

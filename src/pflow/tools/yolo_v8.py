@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 from hashlib import md5
-from typing import List, Tuple, Callable, Any
+from typing import List, Tuple, Callable, Any, Dict
 
 import torch
 import yaml
@@ -364,7 +364,7 @@ def train(
     model_output: str,
     epochs: int = 100,
     batch_size: int = 8,
-) -> Dataset:
+) -> Dict[str, Any]:
     model = YOLO(model_name)
     device = check_device()
     print("Training on device: ", device)
@@ -375,16 +375,30 @@ def train(
         batch=batch_size,
         imgsz=640,
         device=device,
+        val=True,
+        project="pflow",
+        name="pflow1",
     )
     if results is None:
         print("Training failed")
-        return dataset
+        return {"dataset": dataset}
     # Save the model
     current_model_location = Path(results.save_dir) / "weights" / "best.pt"
     model_output_dir = Path(model_output).parent
     model_output_dir.mkdir(parents=True, exist_ok=True)
     current_model_location.rename(model_output)
-    return dataset
+    print("Model saved in: ", model_output)
+
+    metrics = results.results_dict
+    curves = results.curves
+    curves_results = results.curve_results
+
+    return {
+        "dataset": dataset,
+        "metrics": metrics,
+        "curves": curves,
+        "curves_results": curves_results,
+    }
 
 
 def infer(dataset: Dataset, model: str) -> Dataset:

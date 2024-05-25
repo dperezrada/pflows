@@ -1,0 +1,19 @@
+[
+  {
+    "task": "base.echo",
+    "text": "hello world"
+  },
+  {
+    "skip": true,
+    "task": "base.echo",
+    "text": "We are not going to see this"
+  },
+  {
+    "task": "base.wait",
+    "seconds": 7
+  },
+  {
+    "task": "base.echo",
+    "text": "bye"
+  }
+]

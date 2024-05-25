@@ -376,8 +376,6 @@ def train(
         imgsz=640,
         device=device,
         val=True,
-        project="pflow",
-        name="pflow1",
     )
     if results is None:
         print("Training failed")
@@ -390,14 +388,10 @@ def train(
     print("Model saved in: ", model_output)
 
     metrics = results.results_dict
-    curves = results.curves
-    curves_results = results.curve_results
 
     return {
         "dataset": dataset,
         "metrics": metrics,
-        "curves": curves,
-        "curves_results": curves_results,
     }
 
 

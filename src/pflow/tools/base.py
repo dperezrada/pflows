@@ -1,7 +1,8 @@
 import os
+import time
 import sys
 import glob
-from typing import List
+from typing import Dict, List
 from pathlib import Path
 
 
@@ -102,3 +103,20 @@ def load_images(
 
 def terminate() -> None:
     sys.exit(0)
+
+
+def wait(minutes=None, seconds=None) -> None:
+    if minutes is not None and seconds is not None:
+        raise ValueError("You can only specify one of the arguments")
+    total_seconds = 0
+    if minutes is not None:
+        total_seconds += minutes * 60
+    if seconds is not None:
+        total_seconds += seconds
+    print(f"Waiting for {total_seconds} seconds")
+    time.sleep(total_seconds)
+
+
+def echo(text: str) -> Dict[str, str]:
+    print(text)
+    return {"echo": text}

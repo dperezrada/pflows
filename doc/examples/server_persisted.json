@@ -15,6 +15,7 @@
   {
     "id": "echo_final",
     "task": "base.echo",
-    "text": "bye"
+    "text": "bye",
+    "path": "{{PERSISTED_FOLDER}}/bye.txt"
   }
 ]

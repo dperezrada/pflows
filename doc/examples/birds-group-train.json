@@ -9,6 +9,7 @@
     "folder_path": "{{BASE_FOLDER}}/pflow-example/datasets/downloaded/cub200_parts-50"
   },
   {
+    "id": "initial_images_count",
     "task": "base.count_images"
   },
   {
@@ -45,6 +46,10 @@
     "number": 5
   },
   {
+    "id": "final_images_count",
+    "task": "base.count_images"
+  },
+  {
     "task": "base.count_categories"
   },
   {
@@ -56,10 +61,11 @@
     "pre_process_images": true
   },
   {
+    "id": "train",
     "task": "yolo_v8.train",
     "model_name": "https://github.com/ultralytics/assets/releases/download/v8.2.0/yolov8n-seg.pt",
     "epochs": 10,
     "data_file": "{{BASE_FOLDER}}/pflow-example/datasets/processed/birds-grouped-categories-cub200_parts-50/data.yaml",
-    "model_output": "{{BASE_FOLDER}}/pflow-example/models/birds-grouped-categories-cub200_parts-50-seg.pt"
+    "model_output": "{{PERSISTED_FOLDER}}/pflow-example/models/birds-grouped-categories-cub200_parts-50-seg.pt"
   }
 ]

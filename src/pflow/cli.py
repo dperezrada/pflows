@@ -31,9 +31,13 @@ def main() -> None:
 
     if not worflow_path:
         parser.error("The 'workflow_path' argument is required.")
+    output_data: Dict[str, Dict[str, Any]] = {"job": {}}
+    output_key = "job"
 
     try:
-        output_data = run_workflow(args.workflow_path)
+        output_data = run_workflow(
+            args.workflow_path, store_dict=output_data, store_dict_key=output_key
+        )
         formatted_output = format_output(output_data)
         if output_json:
             with open(output_json, "w", encoding="utf-8") as f:

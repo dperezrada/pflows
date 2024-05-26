@@ -50,3 +50,4 @@ class Task:
     function: Callable[..., Any]
     params: Dict[str, Any]
     skip: bool = False
+    id: str | None = None

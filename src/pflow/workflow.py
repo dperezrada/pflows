@@ -3,7 +3,7 @@ import re
 import json
 import inspect
 
-from typing import Sequence, Tuple, Dict, Any, Callable, List
+from typing import Sequence, Tuple, Dict, Any, Callable, List, cast
 from pflow.typedef import Dataset, Task
 
 
@@ -45,9 +45,33 @@ def replace_variables(text: str, current_dir: str | None = None) -> str:
             if match == "CURRENT_DIR" and current_dir is not None:
                 value = current_dir
             else:
-                raise ValueError(f"The variable '{match}' is not defined.")
+                found_base_folder = os.getenv("BASE_FOLDER")
+                if match == "PERSISTED_FOLDER" and found_base_folder is not None:
+                    value = found_base_folder
+                else:
+                    raise ValueError(f"The variable '{match}' is not defined.")
         text = text.replace(f"{{{{{match}}}}}", value)
     return text
+
+
+def prepare_workflow(
+    raw_workflow: Sequence[Dict[str, Any]], workflow_dir: str | None
+) -> Sequence[Dict[str, Any]]:
+    non_set_env_tasks_found = False
+    workflow_tasks = []
+    for task in raw_workflow:
+        if task["task"] == "set_env_var":
+            if non_set_env_tasks_found:
+                raise ValueError("set_env_var tasks must be the first tasks in the workflow.")
+            os.environ[task["name"]] = task["value"]
+            continue
+        workflow_tasks.append(task)
+        non_set_env_tasks_found = True
+
+    workflow_text = json.dumps(workflow_tasks)
+    workflow_text = replace_variables(workflow_text, workflow_dir)
+    workflow = cast(Sequence[Dict[str, Any]], json.loads(workflow_text))
+    return workflow
 
 
 # pylint: disable=too-many-locals,too-many-branches
@@ -62,20 +86,7 @@ def read_workflow(
     if raw_workflow is None:
         raise ValueError("You must provide a workflow path or a workflow.")
 
-    non_set_env_tasks_found = False
-    workflow_tasks = []
-    for index, task in enumerate(raw_workflow):
-        if task["task"] == "set_env_var":
-            if non_set_env_tasks_found:
-                raise ValueError("set_env_var tasks must be the first tasks in the workflow.")
-            os.environ[task["name"]] = task["value"]
-            continue
-        workflow_tasks.append(task)
-        non_set_env_tasks_found = True
-
-    workflow_text = json.dumps(workflow_tasks)
-    workflow_text = replace_variables(workflow_text, workflow_dir)
-    workflow = json.loads(workflow_text)
+    workflow = prepare_workflow(raw_workflow, workflow_dir)
 
     workflow_data = {"dataset": Dataset(images=[], categories=[], groups=[])}
     workflow_reviewed_tasks: List[Task] = []
@@ -88,6 +99,7 @@ def read_workflow(
 
         task_function, params = load_function(task_name)
         skip_task = False
+        task_id = None
         # check if all required parameters are present
         for param, info in params.items():
             if info["required"] and param not in task_args:
@@ -113,6 +125,9 @@ def read_workflow(
         if "skip" in task_args:
             skip_task = True
             del task_args["skip"]
+        if "id" in task_args:
+            task_id = task_args["id"]
+            del task_args["id"]
 
         # check if there are any extra parameters
         for param in task_args:
@@ -121,7 +136,9 @@ def read_workflow(
                     task_args[param] = workflow_data[param]
                     continue
                 raise ValueError(f"The parameter '{param}' is not valid for task {index +1}.")
-        task = Task(task=task_name, function=task_function, params=task_args, skip=skip_task)
+        task = Task(
+            task=task_name, function=task_function, params=task_args, skip=skip_task, id=task_id
+        )
         workflow_reviewed_tasks.append(task)
 
     return workflow_reviewed_tasks, workflow_data
@@ -143,9 +160,13 @@ def read_local_workflow(workflow_path: str) -> Tuple[Sequence[Dict[str, Any]], s
 
 
 def run_workflow(
-    workflow_path: str | None = None, raw_workflow: Sequence[Dict[str, Any]] | None = None
+    workflow_path: str | None = None,
+    raw_workflow: Sequence[Dict[str, Any]] | None = None,
+    store_dict: Dict[str, Any] | None = None,
+    store_dict_key: str | None = None,
 ) -> Dict[str, Any]:
     workflow, workflow_data = read_workflow(workflow_path, raw_workflow)
+    id_output_data = {}
     for task in workflow:
         print("")
         print("-" * 20, task.task, "-" * 20)
@@ -163,6 +184,20 @@ def run_workflow(
         result = task.function(**params)
         if result is not None and isinstance(result, dict):
             workflow_data.update(result)
+            if (
+                task.id is not None
+                and store_dict is not None
+                and store_dict_key is not None
+                and result != {}
+            ):
+                # get result without the dataset key
+                id_output_data[task.id] = {
+                    key: value for key, value in result.items() if key != "dataset"
+                }
+                store_dict[store_dict_key] = {**store_dict[store_dict_key], **id_output_data}
         if result is not None and isinstance(result, Dataset):
             workflow_data["dataset"] = result
-    return workflow_data
+    if store_dict is not None and store_dict_key is not None:
+        store_dict[store_dict_key] = {**store_dict[store_dict_key], **id_output_data}
+        return cast(Dict[str, Any], store_dict[store_dict_key])
+    return {}

@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 from hashlib import md5
+import shutil
 from typing import List, Tuple, Callable, Any, Dict
 
 import torch
@@ -384,15 +385,12 @@ def train(
     current_model_location = Path(results.save_dir) / "weights" / "best.pt"
     model_output_dir = Path(model_output).parent
     model_output_dir.mkdir(parents=True, exist_ok=True)
-    current_model_location.rename(model_output)
+    shutil.move(current_model_location, model_output)
     print("Model saved in: ", model_output)
 
     metrics = results.results_dict
 
-    return {
-        "dataset": dataset,
-        "metrics": metrics,
-    }
+    return {"dataset": dataset, "metrics": metrics, "model_output": model_output}
 
 
 def infer(dataset: Dataset, model: str) -> Dataset:

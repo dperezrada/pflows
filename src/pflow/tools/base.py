@@ -12,14 +12,16 @@ from pflow.typedef import Dataset, Image
 ALLOWED_IMAGES = [".jpg", ".png", ".jpeg"]
 
 
-def count_images(dataset: Dataset) -> None:
+def count_images(dataset: Dataset) -> Dict[str, int]:
     print()
     print("total images: ", len(dataset.images))
+    return {"count": len(dataset.images)}
 
 
-def count_categories(dataset: Dataset) -> None:
+def count_categories(dataset: Dataset) -> Dict[str, int]:
     print()
     print("total categories: ", len(dataset.categories))
+    return {"count": len(dataset.categories)}
 
 
 def show_categories(dataset: Dataset) -> None:
@@ -105,7 +107,7 @@ def terminate() -> None:
     sys.exit(0)
 
 
-def wait(minutes=None, seconds=None) -> None:
+def wait(minutes: int | None = None, seconds: int | None = None) -> None:
     if minutes is not None and seconds is not None:
         raise ValueError("You can only specify one of the arguments")
     total_seconds = 0
@@ -117,6 +119,10 @@ def wait(minutes=None, seconds=None) -> None:
     time.sleep(total_seconds)
 
 
-def echo(text: str) -> Dict[str, str]:
-    print(text)
+def echo(text: str, path: str = "") -> Dict[str, str]:
+    if path:
+        with open(path, "w", encoding="utf-8") as file:
+            file.write(text)
+    else:
+        print(text)
     return {"echo": text}

@@ -15,14 +15,14 @@ import numpy as np
 from skimage.measure import approximate_polygon
 from numpy.typing import NDArray
 
-from pflow.typedef import Annotation, Category, Dataset
-from pflow.polygons import (
+from pflows.typedef import Annotation, Category, Dataset
+from pflows.polygons import (
     calculate_center_from_bbox,
     calculate_center_from_polygon,
     bbox_from_polygon,
     polygon_from_bbox,
 )
-from pflow.model import get_image_info
+from pflows.model import get_image_info
 
 GROUPS_ALIAS = {"val": "val", "test": "test", "valid": "val", "train": "train"}
 ROUNDING = 6
@@ -361,18 +361,18 @@ def check_device() -> str:
 
 
 class CustomEncoder(json.JSONEncoder):
-    def default(self, obj: Any) -> Any:
-        if isinstance(obj, np.ndarray):
-            return obj.tolist()
-        if isinstance(obj, (datetime, date)):
-            return obj.isoformat()
-        if isinstance(obj, Path):
-            return str(obj)
+    def default(self, o: Any) -> Any:
+        if isinstance(o, np.ndarray):
+            return o.tolist()
+        if isinstance(o, (datetime, date)):
+            return o.isoformat()
+        if isinstance(o, Path):
+            return str(o)
         try:
-            return obj.__dict__
+            return o.__dict__
         except AttributeError:
             pass
-        return super().default(obj)
+        return super().default(o)
 
 
 def train(

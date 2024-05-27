@@ -3,7 +3,7 @@ import re
 
 from typing import List
 
-from pflow.typedef import Dataset, Image
+from pflows.typedef import Dataset, Image
 
 
 def sample(dataset: Dataset, number: int, offset: int = 0, sort: str | None = None) -> Dataset:

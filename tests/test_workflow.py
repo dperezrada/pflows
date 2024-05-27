@@ -2,7 +2,7 @@ import os
 import json
 import tempfile
 
-from pflow.workflow import read_workflow
+from pflows.workflow import read_workflow
 
 
 workflow_w_variable = [

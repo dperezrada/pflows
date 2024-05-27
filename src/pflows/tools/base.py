@@ -6,8 +6,8 @@ from typing import Dict, List
 from pathlib import Path
 
 
-from pflow.model import get_image_info
-from pflow.typedef import Dataset, Image
+from pflows.model import get_image_info
+from pflows.typedef import Dataset, Image
 
 ALLOWED_IMAGES = [".jpg", ".png", ".jpeg"]
 

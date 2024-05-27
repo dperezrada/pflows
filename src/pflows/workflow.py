@@ -4,7 +4,7 @@ import json
 import inspect
 
 from typing import Sequence, Tuple, Dict, Any, Callable, List, cast
-from pflow.typedef import Dataset, Task
+from pflows.typedef import Dataset, Task
 
 
 def load_function_args(function: Callable[..., Any]) -> Dict[str, Dict[str, str | bool]]:
@@ -25,7 +25,7 @@ def load_function_args(function: Callable[..., Any]) -> Dict[str, Dict[str, str 
 def load_function(task_name: str) -> Tuple[Any, Dict[str, Dict[str, str | bool]]]:
     try:
         task_file, task_function_name = task_name.split(".")
-        task_module = __import__(f"pflow.tools.{task_file}", fromlist=[task_function_name])
+        task_module = __import__(f"pflows.tools.{task_file}", fromlist=[task_function_name])
         task_function = getattr(task_module, task_function_name)
         params = load_function_args(task_function)
     except Exception as exc:

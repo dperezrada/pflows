@@ -1,5 +1,5 @@
 import pytest
-from pflow.tools.filter_images import by_ids, sample
+from pflows.tools.filter_images import by_ids, sample
 
 def test_sample(dataset):
     assert len(dataset.images) == 8

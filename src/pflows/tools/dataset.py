@@ -2,9 +2,10 @@ import math
 from pathlib import Path
 import random
 from typing import Any, Dict, List, Tuple
-from pflow.typedef import Dataset, Image
+from pflows.typedef import Dataset, Image
 
 
+# pylint: disable=too-many-locals
 def re_split_dataset(
     dataset: Dataset,
     train_percentage: float = 0.7,

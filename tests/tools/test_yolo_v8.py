@@ -1,9 +1,9 @@
 import pytest
 from pathlib import Path
-from pflow.tools.yolo_v8 import process_image_annotations, run_model
-from pflow.tools.filter_images import sample
-from pflow.typedef import Dataset, Category
-from pflow.tools.annotations import filter_by_tag
+from pflows.tools.yolo_v8 import process_image_annotations, run_model
+from pflows.tools.filter_images import sample
+from pflows.typedef import Dataset, Category
+from pflows.tools.annotations import filter_by_tag
 
 model_path = Path(__file__).parent / "yolov8n.pt"
 

@@ -2,7 +2,7 @@ from hashlib import md5
 
 from PIL import Image as ImagePil
 
-from pflow.typedef import Image
+from pflows.typedef import Image
 
 
 def get_image_info(image_path: str, group_name: str) -> Image:

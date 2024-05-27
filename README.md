@@ -13,7 +13,7 @@ cp .env.default .env
 
 ## Run
 ```
-pflow doc/examples/birds-grouped-categories.json
+pflows doc/examples/birds-grouped-categories.json
 ```
 
 In this example, we defined a workflow to download the dataset from Roboflow

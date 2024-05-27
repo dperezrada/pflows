@@ -12,6 +12,6 @@
   },
   {
     "task": "yolo_v8.write",
-    "target_dir": "{{BASE_FOLDER}}/pflow-example/datasets/infer/birds-grouped-categories-cub200_parts-50-1"
+    "target_dir": "{{BASE_FOLDER}}/pflows-example/datasets/infer/birds-grouped-categories-cub200_parts-50-1"
   }
 ]

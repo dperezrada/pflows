@@ -1,4 +1,6 @@
 import os
+import json
+from datetime import datetime, date
 from pathlib import Path
 from hashlib import md5
 import shutil
@@ -358,6 +360,21 @@ def check_device() -> str:
     return device
 
 
+class CustomEncoder(json.JSONEncoder):
+    def default(self, obj: Any) -> Any:
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        if isinstance(obj, (datetime, date)):
+            return obj.isoformat()
+        if isinstance(obj, Path):
+            return str(obj)
+        try:
+            return obj.__dict__
+        except AttributeError:
+            pass
+        return super().default(obj)
+
+
 def train(
     dataset: Dataset,
     data_file: str,
@@ -381,16 +398,30 @@ def train(
     if results is None:
         print("Training failed")
         return {"dataset": dataset}
+    try:
+        results_dict = {
+            key: value for key, value in results.__dict__.items() if not key.startswith("on_")
+        }
+    # pylint: disable=broad-except
+    except Exception:
+        results_dict = {
+            "box": json.loads(json.dumps(results.box.__dict__ or {}, cls=CustomEncoder)),
+            "seg": json.loads(json.dumps(results.seg.__dict__ or {}, cls=CustomEncoder)),
+        }
+
     # Save the model
     current_model_location = Path(results.save_dir) / "weights" / "best.pt"
     model_output_dir = Path(model_output).parent
     model_output_dir.mkdir(parents=True, exist_ok=True)
     shutil.move(current_model_location, model_output)
     print("Model saved in: ", model_output)
+    # results dict and ignore the key starting with on_
 
-    metrics = results.results_dict
-
-    return {"dataset": dataset, "metrics": metrics, "model_output": model_output}
+    return {
+        "dataset": dataset,
+        "results": json.loads(json.dumps(results_dict, cls=CustomEncoder)),
+        "model_output": model_output,
+    }
 
 
 def infer(dataset: Dataset, model: str) -> Dataset:

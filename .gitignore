@@ -112,3 +112,4 @@ ENV/
 dani-workflows/
 runs/
 *.pt
+tmp

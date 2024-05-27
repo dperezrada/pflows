@@ -1,6 +1,7 @@
 import math
+from pathlib import Path
 import random
-from typing import List, Tuple
+from typing import Any, Dict, List, Tuple
 from pflow.typedef import Dataset, Image
 
 
@@ -9,7 +10,7 @@ def re_split_dataset(
     train_percentage: float = 0.7,
     val_percentage: float = 0.2,
     test_percentage: float = 0.1,
-) -> Dataset:
+) -> Dict[str, Any]:
     # Validate percentages
     total_percentage = train_percentage + val_percentage + test_percentage
     rounded_total = math.ceil(total_percentage * 100)
@@ -39,7 +40,20 @@ def re_split_dataset(
         groups.append("val")
     if test_total_images > 0:
         groups.append("test")
-    return Dataset(images=images, categories=dataset.categories, groups=groups)
+
+    images_ids_by_group: Dict[str, List[Dict[str, Any]]] = {group: [] for group in groups}
+    for image in images:
+        images_ids_by_group[image.group].append(
+            {
+                "id": image.id,
+                "name": Path(image.path).name,
+                "intermediate_ids": image.intermediate_ids,
+            }
+        )
+    return {
+        "dataset": Dataset(images=images, categories=dataset.categories, groups=groups),
+        "ids_by_group": images_ids_by_group,
+    }
 
 
 def calculate_total_images(

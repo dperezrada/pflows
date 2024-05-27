@@ -45,6 +45,7 @@ pflow = "pflow.cli:main"
 
 [tool.mypy]
 files = "."
+exclude = "tmp"
 
 # Use strict defaults
 strict = true

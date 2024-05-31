@@ -11,3 +11,5 @@ python-dotenv==1.0.1
 fastapi==0.111.0
 fastapi-cli==0.0.4
 modal==0.62.181
+requests==2.31.0
+requests-toolbelt==1.0.0

@@ -4,10 +4,12 @@ import sys
 import glob
 from typing import Dict, List
 from pathlib import Path
+import shutil
+import zipfile
 
 
-from pflow.model import get_image_info
-from pflow.typedef import Dataset, Image
+from pflows.model import get_image_info
+from pflows.typedef import Dataset, Image
 
 ALLOWED_IMAGES = [".jpg", ".png", ".jpeg"]
 
@@ -126,3 +128,25 @@ def echo(text: str, path: str = "") -> Dict[str, str]:
     else:
         print(text)
     return {"echo": text}
+
+
+def compress_folder(compress_path: str, output: str) -> Dict[str, str]:
+
+    clean_output = output
+    if output.endswith(".zip"):
+        clean_output = output[:-4]
+    zip_path = f"{clean_output}.zip"
+    if os.path.exists(zip_path):
+        # remove the existing zip file
+        os.remove(zip_path)
+    shutil.make_archive(clean_output, "zip", compress_path)
+    return {"status": "compressed", "compress_path": compress_path, "output": output}
+
+
+def decompress_zip(zip_path: str, output: str) -> Dict[str, str]:
+    if not os.path.exists(output):
+        os.makedirs(output, exist_ok=True)
+
+    with zipfile.ZipFile(zip_path, "r") as zip_ref:
+        zip_ref.extractall(output)
+    return {"status": "uncompressed", "zip_path": zip_path, "output": output}

@@ -2,13 +2,13 @@ from hashlib import md5
 from dataclasses import asdict
 from typing import Sequence
 
-from pflow.polygons import (
+from pflows.polygons import (
     bbox_from_polygon,
     calculate_center_from_polygon,
     merge_polygons,
     polygon_from_bbox,
 )
-from pflow.typedef import Annotation, Dataset, Category, Image
+from pflows.typedef import Annotation, Dataset, Category, Image
 
 
 def keep(dataset: Dataset, categories: list[str]) -> Dataset:

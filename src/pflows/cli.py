@@ -1,4 +1,4 @@
-"""Console script for pflow."""
+"""Console script for pflows."""
 
 import json
 import argparse
@@ -6,7 +6,7 @@ from dataclasses import asdict, is_dataclass
 from typing import Dict, Any
 from dotenv import load_dotenv
 
-from pflow.workflow import run_workflow
+from pflows.workflow import run_workflow
 
 load_dotenv()
 

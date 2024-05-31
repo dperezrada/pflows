@@ -2,7 +2,7 @@ from typing import Tuple, Sequence
 
 from shapely.geometry import Polygon, MultiPolygon
 
-from pflow.typedef import Annotation
+from pflows.typedef import Annotation
 
 ROUNDING = 6
 

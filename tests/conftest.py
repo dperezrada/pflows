@@ -5,7 +5,7 @@ warnings.filterwarnings("ignore", category=DeprecationWarning, module="thop")
 import pytest 
 from pathlib import Path
 
-from pflow.tools.yolo_v8 import load_dataset
+from pflows.tools.yolo_v8 import load_dataset
 
 current_folder = Path(__file__).parent
 

@@ -3,7 +3,7 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "pflow"
+name = "pflows"
 version = "0.1.0"
 description = "Several tools for dealing with image annotations to train YOLO or similar models"
 readme = "README.md"
@@ -25,9 +25,9 @@ optional-dependencies = {dev = { file = ["requirements_dev.txt"] }}
 
 [project.urls]
 
-bugs = "https://github.com/dperezrada/pflow/issues"
-changelog = "https://github.com/dperezrada/pflow/blob/master/changelog.md"
-homepage = "https://github.com/dperezrada/pflow"
+bugs = "https://github.com/dperezrada/pflows/issues"
+changelog = "https://github.com/dperezrada/pflows/blob/master/changelog.md"
+homepage = "https://github.com/dperezrada/pflows"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
@@ -37,7 +37,7 @@ package-dir = {"" = "src"}
 
 
 [project.scripts]
-pflow = "pflow.cli:main"
+pflows = "pflows.cli:main"
 
 
 # Mypy

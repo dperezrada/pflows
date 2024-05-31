@@ -3,7 +3,7 @@ import re
 
 from typing import List
 
-from pflow.typedef import Dataset, Image
+from pflows.typedef import Dataset, Image
 
 
 def sample(dataset: Dataset, number: int, offset: int = 0, sort: str | None = None) -> Dataset:
@@ -46,3 +46,11 @@ def name_duplicate(dataset: Dataset, regexp: str) -> Dataset:
     print(f"found {len(exclude_images)} duplicate images")
     dataset.images = [image for image in dataset.images if image.path not in exclude_images]
     return dataset
+
+
+def by_group(dataset: Dataset, group: str) -> Dataset:
+    return Dataset(
+        images=[image for image in dataset.images if group == image.group],
+        categories=dataset.categories,
+        groups=dataset.groups,
+    )

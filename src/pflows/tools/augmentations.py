@@ -9,8 +9,8 @@ import numpy as np
 import albumentations as A
 from shapely.geometry import Polygon
 
-from pflow.polygons import bbox_from_polygon, calculate_center_from_polygon
-from pflow.typedef import Annotation, Dataset, Image
+from pflows.polygons import bbox_from_polygon, calculate_center_from_polygon
+from pflows.typedef import Annotation, Dataset, Image
 
 
 def find_biggest_contour(

@@ -2,9 +2,10 @@ import math
 from pathlib import Path
 import random
 from typing import Any, Dict, List, Tuple
-from pflow.typedef import Dataset, Image
+from pflows.typedef import Dataset, Image
 
 
+# pylint: disable=too-many-locals
 def re_split_dataset(
     dataset: Dataset,
     train_percentage: float = 0.7,
@@ -90,3 +91,19 @@ def assign_groups(
             image.group = group_name
             images.append(image)
     return images
+
+
+def show_dataset(dataset: Dataset) -> Dict[str, Any]:
+    to_return = []
+    for image in dataset.images:
+        to_return.append(
+            {
+                **image.__dict__,
+                "annotations": [annotation.__dict__ for annotation in image.annotations],
+            }
+        )
+    return {
+        "images": to_return,
+        "categories": [category.__dict__ for category in dataset.categories],
+        "groups": dataset.groups,
+    }

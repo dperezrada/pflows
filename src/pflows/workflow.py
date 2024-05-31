@@ -49,7 +49,8 @@ def replace_variables(text: str, current_dir: str | None = None) -> str:
                 if match == "PERSISTED_FOLDER" and found_base_folder is not None:
                     value = found_base_folder
                 else:
-                    raise ValueError(f"The variable '{match}' is not defined.")
+                    print(f"Variable {match} not found in environment variables.")
+                    continue
         text = text.replace(f"{{{{{match}}}}}", value)
     return text
 

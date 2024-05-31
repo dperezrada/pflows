@@ -46,7 +46,7 @@ web_app = fastapi.FastAPI()
 @app.function(
     image=image,
     volumes={"/root/jobs_data": jobs_volume, "/root/uploads_data": uploads_volume},
-    secrets=[Secret.from_name("PFLOW_AUTH_TOKEN")]
+    secrets=[Secret.from_name("PFLOW_AUTH_TOKEN")],
 )
 @asgi_app()
 def fastapi_app() -> Any:
@@ -59,13 +59,23 @@ def set_env(env_variables: Dict[str, Any], job_id: str) -> None:
     if os.environ.get("BASE_FOLDER") is None:
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["BASE_FOLDER"] = tmp
+            os.environ["REMOTE_BASE_FOLDER"] = os.environ["BASE_FOLDER"]
             print(f"Setting BASE_FOLDER to {tmp}")
+    os.environ["JOB_ID"] = job_id
+
     os.environ["PERSISTED_FOLDER"] = f"/root/jobs_data/{job_id}"
+    os.environ["REMOTE_PERSISTED_FOLDER"] = os.environ["PERSISTED_FOLDER"]
     if not os.path.exists(os.environ["PERSISTED_FOLDER"]):
         os.makedirs(os.environ["PERSISTED_FOLDER"], exist_ok=True)
+    os.environ["TEMP_FOLDER"] = tempfile.gettempdir()
+    os.environ["REMOTE_TEMP_FOLDER"] = os.environ["TEMP_FOLDER"]
 
 
-@app.function(image=image, timeout=5_400, volumes={"/root/jobs_data": jobs_volume})
+@app.function(
+    image=image,
+    timeout=5_400,
+    volumes={"/root/jobs_data": jobs_volume, "/root/uploads_data": uploads_volume},
+)
 def endpoint_run_workflow_cpu(
     workflow: Sequence[Dict[str, Any]], env: Dict[str, Any], job_id: str
 ) -> Dict[str, Any]:
@@ -79,7 +89,10 @@ def endpoint_run_workflow_cpu(
 
 
 @app.function(
-    image=image_gpu, gpu=GPU_TYPE, timeout=5_400, volumes={"/root/jobs_data": jobs_volume}
+    image=image_gpu,
+    gpu=GPU_TYPE,
+    timeout=5_400,
+    volumes={"/root/jobs_data": jobs_volume, "/root/uploads_data": uploads_volume},
 )
 def endpoint_run_workflow_gpu(
     workflow: Sequence[Dict[str, Any]], env: Dict[str, Any], job_id: str
@@ -119,11 +132,14 @@ def auth_required(endpoint_func: Any) -> Any:
     async def wrapper(*args: Any, **kwargs: Any) -> Any:
         equal_tokens = False
         try:
-            request: fastapi.Request | None = kwargs.get("request") or kwargs.get("_request") or None
+            request: fastapi.Request | None = (
+                kwargs.get("request") or kwargs.get("_request") or None
+            )
             if request is None:
                 raise ValueError("Request not found")
             token = (request.headers.get("authorization") or "").split(" ")[1]
             equal_tokens = os.environ.get("PFLOW_AUTH_TOKEN") == token
+        # pylint: disable=broad-exception-caught
         except Exception:
             pass
 
@@ -157,7 +173,10 @@ async def workflow_cpu(request: fastapi.Request) -> Dict[str, Any]:
 @web_app.get("/result/{job_id}")
 @auth_required
 async def poll_results(_request: fastapi.Request, job_id: str) -> Any:
-    job_info = persisted_jobs_dict[job_id]
+    try:
+        job_info = persisted_jobs_dict[job_id]
+    except KeyError:
+        return {"error": "Job not found."}
     if job_info.get("status") == "completed":
         return JSONResponse(content=jsonable_encoder(persisted_jobs_dict[job_id]))
     function_call = FunctionCall.from_id(job_info["call_id"])
@@ -209,7 +228,6 @@ async def download_data(request: fastapi.Request, job_id: str) -> Any:
     return fastapi.Response(content=file_content, media_type=content_type)
 
 
-
 @web_app.post("/uploads/download/{upload_id}")
 @auth_required
 async def download_upload_file(request: fastapi.Request, upload_id: str) -> Any:
@@ -239,7 +257,7 @@ async def download_upload_file(request: fastapi.Request, upload_id: str) -> Any:
 
     # Return the file content with the guessed content type
     return fastapi.Response(content=file_content, media_type=content_type)
-    
+
 
 @web_app.post("/uploads")
 @auth_required
@@ -251,12 +269,13 @@ async def upload_file(request: fastapi.Request) -> Any:
     abs_path = f"/root/uploads_data/{upload_id}/{path}"
     os.makedirs(os.path.dirname(abs_path), exist_ok=True)
     if isinstance(file, str):
-        with open(abs_path, "w") as f:
+        with open(abs_path, "w", encoding="utf-8") as f:
             f.write(file)
     else:
         with open(abs_path, "wb") as f:
             f.write(await file.read())
-    return {"status": "uploaded"}
+    return {"status": "uploaded", "path": path, "upload_id": upload_id}
+
 
 @web_app.post("/uploads/delete/{upload_id}")
 @auth_required
@@ -264,7 +283,7 @@ async def delete_upload_file(request: fastapi.Request, upload_id: str) -> Any:
     request_path = (await request.json()).get("path") or ""
     if request_path is None:
         return {"error": "The path is required."}
-    
+
     request_path = request_path.split("/")[-1]
 
     sanitized_path = os.path.normpath(request_path)

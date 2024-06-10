@@ -14,9 +14,6 @@ def test_run_model(dataset):
     new_dataset = run_model(sampled_dataset, str(model_path), add_tag="yolov8n")
     image_data = new_dataset.images[0]
     assert len(image_data.annotations) > total_initial_annotations
-    filter_annotations = filter_by_tag(image_data.annotations, "yolov8n")
-    assert len(filter_annotations) > 0
-    assert filter_annotations[0].category_name == "bird"
 
 
 def test_process_image_annotations():

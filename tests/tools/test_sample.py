@@ -3,19 +3,34 @@ from pflows.tools.filter_images import by_ids, sample
 
 def test_sample(dataset):
     assert len(dataset.images) == 8
-    current_ids = [image.id for image in dataset.images]
-    new_dataset = sample(dataset, number=5, offset=2)
-    assert len(new_dataset.images) == 5
-    assert current_ids[2] == new_dataset.images[0].id
-    assert current_ids[6] == new_dataset.images[4].id
+    new_dataset1 = sample(dataset, number=8, offset=0)
+    new_dataset1_ids = [image.id for image in new_dataset1.images]
+    print(new_dataset1_ids)
+
+    new_dataset2 = sample(dataset, number=5, offset=2)
+    print([
+        image.id for image in new_dataset2.images
+    
+    ])
+
+    assert len(new_dataset2.images) == 5
+    assert new_dataset1_ids[2] == new_dataset2.images[0].id
+    assert new_dataset1_ids[6] == new_dataset2.images[4].id
 
 def test_sample_sorted(dataset):
     assert len(dataset.images) == 8
-    current_ids = sorted([image.id for image in dataset.images])
-    new_dataset = sample(dataset, number=5, offset=2, sort="id")
-    assert len(new_dataset.images) == 5
-    assert current_ids[2] == new_dataset.images[0].id
-    assert current_ids[6] == new_dataset.images[4].id
+    new_dataset1 = sample(dataset, number=8, offset=0)
+    new_dataset1_ids = sorted([image.id for image in new_dataset1.images])
+    print(new_dataset1_ids)
+
+    new_dataset2 = sample(dataset, number=5, offset=2, sort="id")
+    print([
+        image.id for image in new_dataset2.images
+    
+    ])
+    assert len(new_dataset2.images) == 5
+    assert new_dataset1_ids[2] == new_dataset2.images[0].id
+    assert new_dataset1_ids[6] == new_dataset2.images[4].id
 
 def test_by_ids(dataset):
     filter_ids = [image.id for image in dataset.images[0:2]]

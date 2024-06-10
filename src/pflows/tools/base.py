@@ -2,7 +2,7 @@ import os
 import time
 import sys
 import glob
-from typing import Dict, List
+from typing import Any, Dict, List
 from pathlib import Path
 import shutil
 import zipfile
@@ -32,6 +32,14 @@ def show_categories(dataset: Dataset) -> None:
     for category in dataset.categories:
         print("\t", category.name)
 
+def count_groups(dataset: Dataset) -> Dict[str, Any]:
+    print()
+    print("total groups: ", len(dataset.groups))
+    groups_total = {}
+    for group in dataset.groups:
+        groups_total[group] = len([image for image in dataset.images if image.group == group])
+        print("\t", group, ":", groups_total[group])
+    return {"count": len(dataset.groups), "groups_total": groups_total}
 
 def check_folder(folder: str) -> None:
     # We check if the folder exists and if its a folder
@@ -131,7 +139,8 @@ def echo(text: str, path: str = "") -> Dict[str, str]:
 
 
 def compress_folder(compress_path: str, output: str) -> Dict[str, str]:
-
+    if not os.path.exists(compress_path):
+        raise FileNotFoundError("The folder does not exist")
     clean_output = output
     if output.endswith(".zip"):
         clean_output = output[:-4]
@@ -146,6 +155,8 @@ def compress_folder(compress_path: str, output: str) -> Dict[str, str]:
 def decompress_zip(zip_path: str, output: str) -> Dict[str, str]:
     if not os.path.exists(output):
         os.makedirs(output, exist_ok=True)
+    
+    print("decompressing zip file", zip_path, "to", output)
 
     with zipfile.ZipFile(zip_path, "r") as zip_ref:
         zip_ref.extractall(output)

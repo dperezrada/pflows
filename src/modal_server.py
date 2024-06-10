@@ -47,6 +47,7 @@ web_app = fastapi.FastAPI()
     image=image,
     volumes={"/root/jobs_data": jobs_volume, "/root/uploads_data": uploads_volume},
     secrets=[Secret.from_name("PFLOW_AUTH_TOKEN")],
+    timeout=600,
 )
 @asgi_app()
 def fastapi_app() -> Any:
@@ -73,7 +74,7 @@ def set_env(env_variables: Dict[str, Any], job_id: str) -> None:
 
 @app.function(
     image=image,
-    timeout=5_400,
+    timeout=5*60*60,
     volumes={"/root/jobs_data": jobs_volume, "/root/uploads_data": uploads_volume},
 )
 def endpoint_run_workflow_cpu(
@@ -91,7 +92,7 @@ def endpoint_run_workflow_cpu(
 @app.function(
     image=image_gpu,
     gpu=GPU_TYPE,
-    timeout=5_400,
+    timeout=5*60*60,
     volumes={"/root/jobs_data": jobs_volume, "/root/uploads_data": uploads_volume},
 )
 def endpoint_run_workflow_gpu(
@@ -274,7 +275,14 @@ async def upload_file(request: fastapi.Request) -> Any:
     else:
         with open(abs_path, "wb") as f:
             f.write(await file.read())
-    return {"status": "uploaded", "path": path, "upload_id": upload_id}
+
+    return {
+        "status": "uploaded",
+        "path": path,
+        "upload_id": upload_id,
+        "size": os.path.getsize(abs_path),
+        "abs_path": abs_path,
+    }
 
 
 @web_app.post("/uploads/delete/{upload_id}")

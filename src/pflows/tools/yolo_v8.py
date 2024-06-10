@@ -107,7 +107,7 @@ def process_image_annotations(label_path: str, categories: List[Category]) -> Li
     return annotations
 
 
-def load_dataset(folder_path: str) -> Dataset:
+def load_dataset(folder_path: str, number: int | None = None) -> Dataset:
     print()
     print("Loading dataset from yolo_v8 format in: ", folder_path)
     data_yaml = Path(folder_path) / "data.yaml"
@@ -122,12 +122,18 @@ def load_dataset(folder_path: str) -> Dataset:
             if file in GROUPS_ALIAS
         }
         images = []
+        reach_max = False
         for group_name, group_folder in groups.items():
+            if reach_max:
+                break
             if not os.path.exists(group_folder):
                 raise ValueError(f"Group {group_name} does not exist")
 
             images_folder = Path(group_folder) / "images"
             for image_path in os.listdir(images_folder):
+                if number is not None and len(images) >= number:
+                    reach_max = True
+                    break
                 image_target_path = images_folder / image_path
                 if not os.path.exists(image_target_path):
                     raise ValueError(f"Image {image_target_path} does not exist")
@@ -285,6 +291,58 @@ def run_model_on_image(
         reverse=True,
     )
 
+import numpy as np
+
+import numpy as np
+
+def performance_non_max_suppression(boxes, scores, iou_threshold):
+    """
+    Perform non-maximum suppression (NMS) on the bounding boxes.
+
+    Args:
+        boxes (numpy.ndarray): Array of bounding boxes, each represented as [x1, y1, x2, y2].
+        scores (numpy.ndarray): Array of corresponding confidence scores for each box.
+        iou_threshold (float): Intersection over Union (IoU) threshold for suppressing overlapping boxes.
+
+    Returns:
+        list: Indices of the selected boxes after applying NMS.
+    """
+    # Sort the boxes by their confidence scores in descending order
+    sorted_indices = np.argsort(scores)[::-1]
+
+    selected_indices = []
+
+    while len(sorted_indices) > 0:
+        # Select the box with the highest confidence score
+        current_index = sorted_indices[0]
+        selected_indices.append(current_index)
+
+        # Compute the IoU between the current box and the remaining boxes
+        current_box = boxes[current_index]
+        remaining_indices = sorted_indices[1:]
+        remaining_boxes = boxes[remaining_indices]
+
+        # Compute the coordinates of the intersection area
+        x1 = np.maximum(current_box[0], remaining_boxes[:, 0])
+        y1 = np.maximum(current_box[1], remaining_boxes[:, 1])
+        x2 = np.minimum(current_box[2], remaining_boxes[:, 2])
+        y2 = np.minimum(current_box[3], remaining_boxes[:, 3])
+
+        # Compute the area of the intersection
+        intersection_area = np.maximum(0, x2 - x1) * np.maximum(0, y2 - y1)
+
+        # Compute the area of the current box and the remaining boxes
+        current_area = (current_box[2] - current_box[0]) * (current_box[3] - current_box[1])
+        remaining_areas = (remaining_boxes[:, 2] - remaining_boxes[:, 0]) * (remaining_boxes[:, 3] - remaining_boxes[:, 1])
+
+        # Compute the IoU
+        iou = intersection_area / (current_area + remaining_areas - intersection_area)
+
+        # Remove the boxes with IoU greater than the threshold
+        keep_indices = np.where(iou <= iou_threshold)[0]
+        sorted_indices = remaining_indices[keep_indices]
+
+    return selected_indices
 
 def run_model(
     dataset: Dataset,
@@ -292,8 +350,18 @@ def run_model(
     add_tag: str | None = None,
     threshold: float = 0.5,
     segment_tolerance: float = 0.02,
+    non_max_suppression: bool = True,
 ) -> Dataset:
     model = YOLO(model_path)
+    model_names_keys = (
+        model.names.keys() if isinstance(model.names, dict) else range(len(model.names))
+    )
+    model_names = [model.names[key] for key in sorted(model_names_keys)]
+    current_category_names = [category.name for category in dataset.categories]
+    new_categories = current_category_names + [
+        name for name in model_names if name not in current_category_names
+    ]
+    print("New categories found: ", new_categories)
     for image in dataset.images:
         model_annotations = run_model_on_image(
             image.path,
@@ -302,14 +370,56 @@ def run_model(
             segment_tolerance=segment_tolerance,
             add_tag=add_tag,
         )
-        image.annotations = image.annotations + model_annotations
+        keep_annotations = []
+        for category in model_names_keys:
+            category_annotations = [
+                annotation
+                for annotation in model_annotations
+                if annotation.category_id == category
+            ]
+            if not model_annotations:
+                continue
+            if non_max_suppression:
+                keep_annotations_indexes = performance_non_max_suppression(
+                    np.array([annotation.bbox for annotation in category_annotations]),
+                    np.array([annotation.conf for annotation in category_annotations]),
+                    0.4,
+                )
+                keep_annotations.extend(
+                    [category_annotations[index] for index in keep_annotations_indexes]
+                )
+            else:
+                keep_annotations.extend(category_annotations)
+
+        image.annotations = image.annotations + keep_annotations
+
+    dataset.categories = [
+        Category(name=name, id=index) for index, name in enumerate(new_categories)
+    ]
     return dataset
 
 
-def write(dataset: Dataset, target_dir: str, pre_process_images: bool = False) -> None:
-    target_path = Path(target_dir)
-    target_path.mkdir(parents=True, exist_ok=True)
+def write(
+    dataset: Dataset,
+    target_dir: str,
+    pre_process_images: bool = False,
+    remove_existing: bool = False,
+    write_original: bool = True,
+) -> None:
+    raw_path = Path(target_dir) / "raw"
+    target_path = Path(target_dir) / "yolo"
     data_yaml_path = target_path / "data.yaml"
+    if target_path.exists() and remove_existing:
+        if data_yaml_path.exists():
+            # remove the directory
+            shutil.rmtree(target_path)
+            shutil.rmtree(raw_path)
+        else:
+            raise ValueError(
+                f"Directory {target_path} already exists, but is not a yolo_v8 dataset"
+            )
+
+    target_path.mkdir(parents=True, exist_ok=True)
     data_for_yaml = {
         "names": [category.name for category in dataset.categories],
         "nc": len(dataset.categories),
@@ -323,6 +433,28 @@ def write(dataset: Dataset, target_dir: str, pre_process_images: bool = False) -
         )
     total_images: dict[str, int] = {}
     for image in dataset.images:
+        # Copy the original image
+        raw_folder = raw_path / image.group
+        if write_original and pre_process_images:
+            image_folder = raw_folder / "images"
+            image_folder.mkdir(parents=True, exist_ok=True)
+            image_path = image_folder / f"{image.id}.jpg"
+            shutil.copy(image.path, image_path)
+        
+        # write image information
+        dataset_path = raw_path / image.group / "dataset"
+        dataset_path.mkdir(parents=True, exist_ok=True)
+        with open(dataset_path / f"{image.id}.json", "w", encoding="utf-8") as f:
+            f.write(json.dumps(image.__dict__, cls=CustomEncoder, indent=4))
+        
+        # write confidences
+        confidences_folder = target_path / image.group / "confidences"
+        confidences_folder.mkdir(parents=True, exist_ok=True)
+        confidence_path = confidences_folder / f"{image.id}.txt"
+        with open(confidence_path, "w", encoding="utf-8") as f:
+            for annotation in image.annotations:
+                f.write(f"{annotation.conf or ''}\n")
+
         image_folder = target_path / image.group / "images"
         image_folder.mkdir(parents=True, exist_ok=True)
         image_path = image_folder / f"{image.id}.jpg"
@@ -422,22 +554,3 @@ def train(
         "results": json.loads(json.dumps(results_dict, cls=CustomEncoder)),
         "model_output": model_output,
     }
-
-
-def infer(dataset: Dataset, model: str) -> Dataset:
-    yolo_model = YOLO(model)
-    new_categories = dataset.categories
-    new_categories_names = [category.name for category in new_categories]
-    yolo_categories = yolo_model.names
-    if isinstance(yolo_categories, dict):
-        yolo_categories = [yolo_categories[key] for key in sorted(yolo_categories.keys())]
-    for category in yolo_categories:
-        if category not in new_categories_names:
-            new_categories.append(Category(name=category, id=len(new_categories)))
-            new_categories_names.append(category)
-
-    for image in dataset.images:
-        model_annotations = run_model_on_image(image.path, yolo_model, new_categories_names)
-        image.annotations = image.annotations + model_annotations
-    dataset.categories = new_categories
-    return dataset

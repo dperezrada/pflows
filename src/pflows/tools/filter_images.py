@@ -1,20 +1,67 @@
 import os
+import random
 import re
 
 from typing import List
 
 from pflows.typedef import Dataset, Image
 
-
-def sample(dataset: Dataset, number: int, offset: int = 0, sort: str | None = None) -> Dataset:
-    sorted_images = dataset.images
-    if sort is not None:
-        sorted_images = sorted(dataset.images, key=lambda image: getattr(image, sort))
+def sample_group_proportion(dataset: Dataset, number: int, seed: int = 49) -> Dataset:
+    shuffled_images = dataset.images
+    random.seed(seed)
+    random.shuffle(shuffled_images)
+    groups_numbers = {}
+    for image in shuffled_images:
+        if image.group not in groups_numbers:
+            groups_numbers[image.group] = 0
+        groups_numbers[image.group] += 1
+    # calculate the number of images to take per group
+    for group in list(groups_numbers.keys()):
+        groups_numbers[group] = int(number * (groups_numbers[group] / len(shuffled_images)))
+    if sum(groups_numbers.values()) < number:
+        # if the sum of the number of images is less than the number
+        # we will add the remaining images to the group with the most images
+        remaining = number - sum(groups_numbers.values())
+        max_group = max(groups_numbers, key=groups_numbers.get) # type: ignore
+        groups_numbers[max_group] += remaining
+    # take the images
+    images = []
+    for group in list(groups_numbers.keys()):
+        images += [image for image in shuffled_images if image.group == group][: groups_numbers[group]]
+    
     return Dataset(
-        images=sorted_images[offset : offset + number],
+        images=images,
         categories=dataset.categories,
         groups=dataset.groups,
     )
+
+def sample(dataset: Dataset, number: int, offset: int = 0, seed: int = 49, sort: str | None = None) -> Dataset:
+    if dataset.groups is not None and len(dataset.groups) > 1:
+        if offset is not None and  offset > 0:
+            raise ValueError("Offset is not supported when groups are present")
+        return sample_group_proportion(dataset, number, seed)
+    
+    sorted_images = dataset.images
+    new_ids_order = [image.id for image in sorted_images]
+    if sort is not None:
+        new_ids_order = sorted(new_ids_order)
+    else:
+        # shuffle the images using seed
+        random.seed(seed)
+        random.shuffle(new_ids_order)
+    
+    new_images = []
+    for new_id in new_ids_order:
+        image = [image for image in sorted_images if image.id == new_id][0]
+        new_images.append(image)
+    return Dataset(
+        images=new_images[offset:offset + number],
+        categories=dataset.categories,
+        groups=dataset.groups,
+    )
+
+    
+    
 
 
 def by_ids(dataset: Dataset, ids: list[str]) -> Dataset:

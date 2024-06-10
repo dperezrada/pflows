@@ -88,9 +88,6 @@ def get_new_polygons(
                     for i, el in enumerate(new_polygon)
                 )
             )
-            calculated_iou = iou_polygons(new_polygon_hw, polygons[polygon_id - 1])
-            if calculated_iou < 0.3:
-                raise ValueError("IoU is too low")
             new_polygons.append(new_polygon)
     return new_polygons
 
@@ -102,74 +99,84 @@ def generate_augmented_image(
     segments: List[Tuple[float, ...]],
     target_folder: str,
     new_index: int,
+    total_index: int
 ) -> Optional[Dict[str, Any]]:
     new_id = f"{image_id}_aug_{new_index}"
     target_file = f"{target_folder}/{new_id}.jpg"
     image = cv2.imread(image_path)
     height, width = image.shape[:2]
 
-    polygons: List[List[int]] = []
-    for polygon_raw in segments:
-        polygon = []
-        for i in range(0, len(polygon_raw), 2):
-            polygon.extend(
-                [int(width * float(polygon_raw[i])), int(height * float(polygon_raw[i + 1]))]
-            )
-        polygons.append(polygon)
-
+    retry_number = 5
     new_polygons = []
-    try:
-        transform = A.Compose(
-            [
-                A.Affine(
-                    rotate=(-1.5, 1.5),
-                    translate_percent=(-0.015, 0.015),
-                    scale=(1, 1.2),
-                    shear=(-2, 2),
-                    p=1.0,
-                ),
-                A.Defocus(radius=(3, 8), alias_blur=(0.1, 0.4), p=0.7),
-                A.CLAHE(clip_limit=2, p=0.9),
-                A.RandomBrightnessContrast(p=0.5),
-                A.MultiplicativeNoise(multiplier=(0.8, 1.2), per_channel=True, p=0.2),
-                A.GaussNoise(var_limit=(20, 80), mean=50, p=0.8),
-                A.ElasticTransform(alpha=1, sigma=25, alpha_affine=25, p=1.0),
-            ]
-        )
+    for index in range(retry_number):
+        if index != 0:
+            print(f"\tRetrying {index} for {new_id}")
+        polygons: List[List[int]] = []
+        for polygon_raw in segments:
+            polygon = []
+            for i in range(0, len(polygon_raw), 2):
+                polygon.extend(
+                    [int(width * float(polygon_raw[i])), int(height * float(polygon_raw[i + 1]))]
+                )
+            polygons.append(polygon)
 
-        mask = np.zeros((height, width), dtype=np.uint8)
-        for index, polygon_data in enumerate(polygons):
-            pts = np.array(
-                [polygon_data[i : i + 2] for i in range(0, len(polygon_data), 2)],
-                dtype=np.int32,
+        new_polygons = []
+        try:
+            transform = A.Compose(
+                [
+                    A.Affine(
+                        rotate=(-1.5, 1.5),
+                        translate_percent=(-0.015, 0.015),
+                        scale=(1, 1.2),
+                        shear=(-2, 2),
+                        p=1.0,
+                    ),
+                    A.Defocus(radius=(3, 8), alias_blur=(0.1, 0.4), p=0.7),
+                    A.CLAHE(clip_limit=2, p=0.9),
+                    A.RandomBrightnessContrast(p=0.5, brightness_limit=(-.1, .1), contrast_limit=0.2),
+                    A.MultiplicativeNoise(multiplier=(0.8, 1.2), per_channel=True, p=0.2),
+                    A.GaussNoise(var_limit=(20, 80), mean=50, p=0.8),
+                    A.ElasticTransform(alpha=1, sigma=25, alpha_affine=25, p=1.0),
+                ]
             )
-            cv2.fillPoly(mask, [pts], index + 1)  # Use unique IDs as pixel values
 
-        # Apply the transformation
-        transformed = transform(image=image, mask=mask)
-        transformed_image = transformed["image"]
-        transformed_mask = transformed["mask"]
+            mask = np.zeros((height, width), dtype=np.uint8)
+            for index, polygon_data in enumerate(polygons):
+                pts = np.array(
+                    [polygon_data[i : i + 2] for i in range(0, len(polygon_data), 2)],
+                    dtype=np.int32,
+                )
+                cv2.fillPoly(mask, [pts], index + 1)  # Use unique IDs as pixel values
 
-        new_polygons = get_new_polygons(
-            transformed_mask, [tuple(polygon) for polygon in polygons], width, height
-        )
-        if len(new_polygons) != len(polygons):
-            new_polygons = []
-            raise ValueError("Different number of polygons")
-    # pylint: disable=broad-exception-caught
-    except Exception:
-        return None
+            # Apply the transformation
+            transformed = transform(image=image, mask=mask)
+            transformed_image = transformed["image"]
+            transformed_mask = transformed["mask"]
 
-    if len(new_polygons) == 0:
-        return None
+            new_polygons = get_new_polygons(
+                transformed_mask, [tuple(polygon) for polygon in polygons], width, height
+            )
+            # if len(new_polygons) != len(polygons):
+            #     print(f"\tFailed {new_id} {len(new_polygons)} != {len(polygons)}")
+            #     continue
+            # pylint: disable=broad-exception-caught
+        except Exception:
+            continue
+
+            # if len(new_polygons) == 0:
+            #     print(f"\tFailed {new_id} no polygons")
+            #     continue
+        break
 
     cv2.imwrite(target_file, transformed_image)
+    print("image:", total_index)
     return {
         "path": target_file,
         "segments": new_polygons,
         "id": new_id,
         "original_id": image_id,
         "image_index": new_index,
+        "total_index": total_index
     }
 
 
@@ -182,7 +189,7 @@ def generate_augmentations(images: List[Image], number: int = 3) -> List[Image]:
     with ThreadPoolExecutor() as executor:
         futures = []
 
-        for image in images:
+        for index, image in enumerate(images):
             for i in range(number):
                 annotation_segments = [
                     annotation.segmentation
@@ -197,6 +204,7 @@ def generate_augmentations(images: List[Image], number: int = 3) -> List[Image]:
                         annotation_segments,
                         random_temp_folder,
                         i,
+                        index
                     )
                 )
 
@@ -238,8 +246,22 @@ def generate_augmentations(images: List[Image], number: int = 3) -> List[Image]:
     return new_images
 
 
-def generic(dataset: Dataset, number: int = 3) -> Dataset:
-    augmented_images = generate_augmentations(dataset.images, number)
+def generic(dataset: Dataset, number: int = 2) -> Dataset:
+    training_images = [image for image in dataset.images if image.group == "train"]
+    augmented_images = generate_augmentations(training_images, number)
+    return Dataset(
+        images=dataset.images + augmented_images,
+        categories=dataset.categories,
+        groups=dataset.groups,
+    )
+
+def by_categories(dataset: Dataset, categories_numbers: Dict[str,int]) -> Dataset:
+    training_images = [image for image in dataset.images if image.group == "train"]
+    new_augmented_images = []
+    for category, number in categories_numbers.items():
+        category_training = [image for image in training_images if any([annotation.category_name == category for annotation in image.annotations])]
+        augmented_images = generate_augmentations(category_training, number)
+        new_augmented_images += augmented_images
     return Dataset(
         images=dataset.images + augmented_images,
         categories=dataset.categories,

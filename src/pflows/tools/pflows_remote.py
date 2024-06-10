@@ -76,7 +76,7 @@ def download_job_file(
             with open(local_path, "w", encoding="utf-8") as f:
                 f.write(response.text)
         else:
-            with open(local_path, "wb", encoding="utf-8") as f:
+            with open(local_path, "wb") as f:
                 f.write(response.content)
     else:
         raise PFlowsRemoteError(
@@ -97,9 +97,8 @@ def upload_file(
     headers = prepare_headers(token)
     del headers["Content-Type"]
 
-    with open(local_path, "rb", encoding="utf-8") as f:
+    with open(local_path, "rb") as f:
         url = f"{base_url}/uploads"
-        print(url, remote_name, headers)
         files = {"file": (remote_name, f)}
         data = {"path": remote_name}
         response = requests.post(url, headers=headers, data=data, files=files, timeout=60 * 60)
@@ -130,7 +129,7 @@ def download_upload_file(
             with open(local_path, "w", encoding="utf-8") as f:
                 f.write(response.text)
         else:
-            with open(local_path, "wb", encoding="utf-8") as f:
+            with open(local_path, "wb") as f:
                 f.write(response.content)
     else:
         raise PFlowsRemoteError(

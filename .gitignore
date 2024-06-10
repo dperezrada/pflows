@@ -113,3 +113,4 @@ dani-workflows/
 runs/
 *.pt
 tmp
+try_*

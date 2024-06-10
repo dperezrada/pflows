@@ -168,37 +168,40 @@ def run_workflow(
 ) -> Dict[str, Any]:
     workflow, workflow_data = read_workflow(workflow_path, raw_workflow)
     id_output_data = {}
-    for task in workflow:
-        print("")
-        print("-" * 20, task.task, "-" * 20)
-        if task.skip:
-            print("Skipping task.")
-            continue
-        params = {
-            param: (
-                task.params[param]
-                if task.params[param] != "__workflow_parameter__"
-                else workflow_data[param]
-            )
-            for param in task.params
-        }
-        result = task.function(**params)
-        if result is not None and isinstance(result, dict):
-            workflow_data.update(result)
-            if (
-                task.id is not None
-                and store_dict is not None
-                and store_dict_key is not None
-                and result != {}
-            ):
+    try:
+        for task in workflow:
+            print("")
+            print("-" * 20, task.task, "-" * 20)
+            if task.skip:
+                print("Skipping task.")
+                continue
+            params = {
+                param: (
+                    task.params[param]
+                    if task.params[param] != "__workflow_parameter__"
+                    else workflow_data[param]
+                )
+                for param in task.params
+            }
+            result = task.function(**params)
+            if result is not None and isinstance(result, dict):
+                workflow_data.update(result)
                 # get result without the dataset key
-                id_output_data[task.id] = {
-                    key: value for key, value in result.items() if key != "dataset"
-                }
-                store_dict[store_dict_key] = {**store_dict[store_dict_key], **id_output_data}
-        if result is not None and isinstance(result, Dataset):
-            workflow_data["dataset"] = result
+                if task.id is not None:
+                    id_output_data[task.id] = {
+                        key: value for key, value in result.items() if key != "dataset"
+                    }
+                    if (
+                        store_dict is not None
+                        and store_dict_key is not None
+                        and result != {}
+                    ):
+                        store_dict[store_dict_key] = {**store_dict[store_dict_key], **id_output_data}
+            if result is not None and isinstance(result, Dataset):
+                workflow_data["dataset"] = result
+    except SystemExit:
+        pass
     if store_dict is not None and store_dict_key is not None:
         store_dict[store_dict_key] = {**store_dict[store_dict_key], **id_output_data}
         return cast(Dict[str, Any], store_dict[store_dict_key])
-    return {}
+    return id_output_data

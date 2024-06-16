@@ -191,12 +191,11 @@ def run_workflow(
                     id_output_data[task.id] = {
                         key: value for key, value in result.items() if key != "dataset"
                     }
-                    if (
-                        store_dict is not None
-                        and store_dict_key is not None
-                        and result != {}
-                    ):
-                        store_dict[store_dict_key] = {**store_dict[store_dict_key], **id_output_data}
+                    if store_dict is not None and store_dict_key is not None and result != {}:
+                        store_dict[store_dict_key] = {
+                            **store_dict[store_dict_key],
+                            **id_output_data,
+                        }
             if result is not None and isinstance(result, Dataset):
                 workflow_data["dataset"] = result
     except SystemExit:

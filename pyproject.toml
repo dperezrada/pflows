@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pflows"
-version = "0.1.1"
+version = "0.1.3"
 description = "Several tools for dealing with image annotations to train YOLO or similar models"
 readme = "README.md"
 authors = [
@@ -69,3 +69,6 @@ disable = ["C0114", "C0115", "C0116"]
 
 [tool.pylint.typecheck]
 ignored-modules = ["cv2", "skimage"]
+
+[tool.pylint.messages_control]
+disable = "W0511"

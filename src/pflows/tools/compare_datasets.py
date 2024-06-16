@@ -1,8 +1,11 @@
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 
-from pflows.typedef import Annotation
+from pflows.typedef import Annotation, Dataset
 
-def calculate_iou(bbox1: Tuple[float, float, float, float], bbox2: Tuple[float, float, float, float]) -> float:
+
+def calculate_iou(
+    bbox1: Tuple[float, float, float, float], bbox2: Tuple[float, float, float, float]
+) -> float:
     # Calculate the coordinates of the intersection rectangle
     x1 = max(bbox1[0], bbox2[0])
     y1 = max(bbox1[1], bbox2[1])
@@ -21,20 +24,30 @@ def calculate_iou(bbox1: Tuple[float, float, float, float], bbox2: Tuple[float, 
 
     return iou
 
-def find_best_match(gold_annotation: Annotation, new_annotations: List[Annotation]) -> Tuple[Annotation, float]:
+
+def find_best_match(
+    gold_annotation: Annotation, new_annotations: List[Annotation]
+) -> Tuple[Annotation | None, float]:
     best_match = None
     best_iou = 0.0
 
     for new_annotation in new_annotations:
-        if gold_annotation.category_name == new_annotation.category_name and gold_annotation.bbox is not None and new_annotation.bbox is not None:
+        if (
+            gold_annotation.category_name == new_annotation.category_name
+            and gold_annotation.bbox is not None
+            and new_annotation.bbox is not None
+        ):
             iou = calculate_iou(gold_annotation.bbox, new_annotation.bbox)
             if iou > best_iou:
                 best_match = new_annotation
                 best_iou = iou
 
-    return best_match, best_iou
+    return (best_match, best_iou)
 
-def compare_annotations(gold_annotation: Annotation, new_dataset: Dataset, iou_threshold: float = 0.5) -> Dict[str, Any]:
+
+def compare_annotations(
+    gold_annotation: Annotation, new_dataset: Dataset, iou_threshold: float = 0.5
+) -> Dict[str, Any]:
     image_id = gold_annotation.image_id
     category_name = gold_annotation.category_name
 
@@ -47,7 +60,7 @@ def compare_annotations(gold_annotation: Annotation, new_dataset: Dataset, iou_t
             "category_name": category_name,
             "status": "FN",
             "iou": 0.0,
-            "confidence": 0.0
+            "confidence": 0.0,
         }
 
     # Find the best matching annotation in the new image
@@ -59,7 +72,7 @@ def compare_annotations(gold_annotation: Annotation, new_dataset: Dataset, iou_t
             "category_name": category_name,
             "status": "FN",
             "iou": best_iou,
-            "confidence": 0.0
+            "confidence": 0.0,
         }
 
     return {
@@ -67,5 +80,5 @@ def compare_annotations(gold_annotation: Annotation, new_dataset: Dataset, iou_t
         "category_name": category_name,
         "status": "TP" if best_iou >= iou_threshold else "FP",
         "iou": best_iou,
-        "confidence": best_match.conf
+        "confidence": best_match.conf,
     }

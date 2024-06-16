@@ -32,6 +32,7 @@ def show_categories(dataset: Dataset) -> None:
     for category in dataset.categories:
         print("\t", category.name)
 
+
 def count_groups(dataset: Dataset) -> Dict[str, Any]:
     print()
     print("total groups: ", len(dataset.groups))
@@ -40,6 +41,7 @@ def count_groups(dataset: Dataset) -> Dict[str, Any]:
         groups_total[group] = len([image for image in dataset.images if image.group == group])
         print("\t", group, ":", groups_total[group])
     return {"count": len(dataset.groups), "groups_total": groups_total}
+
 
 def check_folder(folder: str) -> None:
     # We check if the folder exists and if its a folder
@@ -155,7 +157,7 @@ def compress_folder(compress_path: str, output: str) -> Dict[str, str]:
 def decompress_zip(zip_path: str, output: str) -> Dict[str, str]:
     if not os.path.exists(output):
         os.makedirs(output, exist_ok=True)
-    
+
     print("decompressing zip file", zip_path, "to", output)
 
     with zipfile.ZipFile(zip_path, "r") as zip_ref:

@@ -291,9 +291,6 @@ def run_model_on_image(
         reverse=True,
     )
 
-import numpy as np
-
-import numpy as np
 
 def performance_non_max_suppression(boxes, scores, iou_threshold):
     """
@@ -302,7 +299,8 @@ def performance_non_max_suppression(boxes, scores, iou_threshold):
     Args:
         boxes (numpy.ndarray): Array of bounding boxes, each represented as [x1, y1, x2, y2].
         scores (numpy.ndarray): Array of corresponding confidence scores for each box.
-        iou_threshold (float): Intersection over Union (IoU) threshold for suppressing overlapping boxes.
+        iou_threshold (float): Intersection over Union (IoU) threshold for
+        suppressing overlapping boxes.
 
     Returns:
         list: Indices of the selected boxes after applying NMS.
@@ -333,7 +331,9 @@ def performance_non_max_suppression(boxes, scores, iou_threshold):
 
         # Compute the area of the current box and the remaining boxes
         current_area = (current_box[2] - current_box[0]) * (current_box[3] - current_box[1])
-        remaining_areas = (remaining_boxes[:, 2] - remaining_boxes[:, 0]) * (remaining_boxes[:, 3] - remaining_boxes[:, 1])
+        remaining_areas = (remaining_boxes[:, 2] - remaining_boxes[:, 0]) * (
+            remaining_boxes[:, 3] - remaining_boxes[:, 1]
+        )
 
         # Compute the IoU
         iou = intersection_area / (current_area + remaining_areas - intersection_area)
@@ -343,6 +343,7 @@ def performance_non_max_suppression(boxes, scores, iou_threshold):
         sorted_indices = remaining_indices[keep_indices]
 
     return selected_indices
+
 
 def run_model(
     dataset: Dataset,
@@ -373,9 +374,7 @@ def run_model(
         keep_annotations = []
         for category in model_names_keys:
             category_annotations = [
-                annotation
-                for annotation in model_annotations
-                if annotation.category_id == category
+                annotation for annotation in model_annotations if annotation.category_id == category
             ]
             if not model_annotations:
                 continue
@@ -399,6 +398,8 @@ def run_model(
     return dataset
 
 
+# TODO: refactor
+# pylint: disable=too-many-branches,too-many-statements
 def write(
     dataset: Dataset,
     target_dir: str,
@@ -440,13 +441,13 @@ def write(
             image_folder.mkdir(parents=True, exist_ok=True)
             image_path = image_folder / f"{image.id}.jpg"
             shutil.copy(image.path, image_path)
-        
+
         # write image information
         dataset_path = raw_path / image.group / "dataset"
         dataset_path.mkdir(parents=True, exist_ok=True)
         with open(dataset_path / f"{image.id}.json", "w", encoding="utf-8") as f:
             f.write(json.dumps(image.__dict__, cls=CustomEncoder, indent=4))
-        
+
         # write confidences
         confidences_folder = target_path / image.group / "confidences"
         confidences_folder.mkdir(parents=True, exist_ok=True)
@@ -454,6 +455,13 @@ def write(
         with open(confidence_path, "w", encoding="utf-8") as f:
             for annotation in image.annotations:
                 f.write(f"{annotation.conf or ''}\n")
+
+        # write image information
+        image_info_folder = target_path / image.group / "image_info"
+        image_info_folder.mkdir(parents=True, exist_ok=True)
+        image_info_path = image_info_folder / f"{image.id}.json"
+        with open(image_info_path, "w", encoding="utf-8") as f:
+            f.write(json.dumps(image.info, cls=CustomEncoder, indent=4))
 
         image_folder = target_path / image.group / "images"
         image_folder.mkdir(parents=True, exist_ok=True)

@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 
-from typing import Any, Callable, Dict, List, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 
 @dataclass
@@ -22,6 +22,8 @@ class Annotation:
     conf: float = -1.0
     category_name: str = ""
     tags: List[str] = field(default_factory=list)
+    original_id: Optional[str] = None
+    truncated: Optional[bool] = False
 
 
 @dataclass
@@ -35,6 +37,7 @@ class Image:
     group: str
     annotations: List[Annotation] = field(default_factory=list)
     tags: List[str] = field(default_factory=list)
+    info: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass

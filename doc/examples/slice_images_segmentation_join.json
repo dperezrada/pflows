@@ -1,0 +1,37 @@
+[
+    {
+        "task": "roboflow_tools.download_dataset",
+        "target_dir": "{{BASE_FOLDER}}/pflows-example/datasets/downloaded/teeth-xc0m4",
+        "url": "https://universe.roboflow.com/teeth-xc0m4/after-seg/dataset/3"
+      },
+    {
+      "task": "yolo_v8.load_dataset",
+      "folder_path": "{{BASE_FOLDER}}/pflows-example/datasets/downloaded/teeth-xc0m4"
+    },
+    {
+        "task": "filter_images.sample",
+        "number": 1
+    },
+    {
+      "id": "initial_images_count",
+      "task": "base.count_images"
+    },
+    {
+      "task": "base.count_categories"
+    },
+    {
+        "task": "images.slice_dataset",
+        "overlap_height_ratio": 0.3,
+        "overlap_width_ratio": 0.3
+    },
+    {
+        "task": "images.join_slice_dataset"
+    },
+    {
+      "task": "yolo_v8.write",
+      "target_dir": "{{BASE_FOLDER}}/pflows-example/datasets/processed/teeth-xc0m4",
+      "pre_process_images": true,
+      "remove_existing": true
+    }
+  ]
+  

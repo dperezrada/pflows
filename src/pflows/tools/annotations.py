@@ -18,8 +18,14 @@ def filter_by_tag(
                     "annotations": [
                         annotation
                         for annotation in image.annotations
-                        if (len(include) == 0 or any(tag in (annotation.tags or []) for tag in include))
-                        and (len(exclude) == 0 or all(tag not in (annotation.tags or []) for tag in exclude))
+                        if (
+                            len(include) == 0
+                            or any(tag in (annotation.tags or []) for tag in include)
+                        )
+                        and (
+                            len(exclude) == 0
+                            or all(tag not in (annotation.tags or []) for tag in exclude)
+                        )
                     ],
                 }
             )
@@ -28,6 +34,7 @@ def filter_by_tag(
         categories=dataset.categories,
         groups=dataset.groups,
     )
+
 
 def keep_certain_categories(dataset: Dataset, categories: List[str]) -> Dataset:
     return Dataset(

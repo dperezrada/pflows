@@ -74,32 +74,23 @@ def iou_polygons(a: Tuple[float, ...], b: Tuple[float, ...]) -> float:
     return iou
 
 
-def get_new_polygons(
-    transformed_mask: Any, polygons: Sequence[Tuple[float, ...]], width: int, height: int
-) -> List[Tuple[float, ...]]:
+def get_new_polygons(transformed_mask: Any, width: int, height: int) -> List[Tuple[float, ...]]:
     new_polygons = []
     for polygon_id in np.unique(transformed_mask):
         if polygon_id > 0:
             new_polygon = get_new_polygon(transformed_mask, polygon_id, width, height)
-            # Multiply by width and height to get the original polygon
-            new_polygon_hw = tuple(
-                (
-                    int(el * width) if i % 2 == 0 else int(el * height)
-                    for i, el in enumerate(new_polygon)
-                )
-            )
             new_polygons.append(new_polygon)
     return new_polygons
 
 
-# pylint: disable=too-many-locals
+# pylint: disable=too-many-locals,too-many-arguments
 def generate_augmented_image(
     image_id: str,
     image_path: str,
     segments: List[Tuple[float, ...]],
     target_folder: str,
     new_index: int,
-    total_index: int
+    total_index: int,
 ) -> Optional[Dict[str, Any]]:
     new_id = f"{image_id}_aug_{new_index}"
     target_file = f"{target_folder}/{new_id}.jpg"
@@ -133,7 +124,9 @@ def generate_augmented_image(
                     ),
                     A.Defocus(radius=(3, 8), alias_blur=(0.1, 0.4), p=0.7),
                     A.CLAHE(clip_limit=2, p=0.9),
-                    A.RandomBrightnessContrast(p=0.5, brightness_limit=(-.1, .1), contrast_limit=0.2),
+                    A.RandomBrightnessContrast(
+                        p=0.5, brightness_limit=(-0.1, 0.1), contrast_limit=0.2
+                    ),
                     A.MultiplicativeNoise(multiplier=(0.8, 1.2), per_channel=True, p=0.2),
                     A.GaussNoise(var_limit=(20, 80), mean=50, p=0.8),
                     A.ElasticTransform(alpha=1, sigma=25, alpha_affine=25, p=1.0),
@@ -153,9 +146,7 @@ def generate_augmented_image(
             transformed_image = transformed["image"]
             transformed_mask = transformed["mask"]
 
-            new_polygons = get_new_polygons(
-                transformed_mask, [tuple(polygon) for polygon in polygons], width, height
-            )
+            new_polygons = get_new_polygons(transformed_mask, width, height)
             # if len(new_polygons) != len(polygons):
             #     print(f"\tFailed {new_id} {len(new_polygons)} != {len(polygons)}")
             #     continue
@@ -176,7 +167,7 @@ def generate_augmented_image(
         "id": new_id,
         "original_id": image_id,
         "image_index": new_index,
-        "total_index": total_index
+        "total_index": total_index,
     }
 
 
@@ -204,7 +195,7 @@ def generate_augmentations(images: List[Image], number: int = 3) -> List[Image]:
                         annotation_segments,
                         random_temp_folder,
                         i,
-                        index
+                        index,
                     )
                 )
 
@@ -255,11 +246,16 @@ def generic(dataset: Dataset, number: int = 2) -> Dataset:
         groups=dataset.groups,
     )
 
-def by_categories(dataset: Dataset, categories_numbers: Dict[str,int]) -> Dataset:
+
+def by_categories(dataset: Dataset, categories_numbers: Dict[str, int]) -> Dataset:
     training_images = [image for image in dataset.images if image.group == "train"]
     new_augmented_images = []
     for category, number in categories_numbers.items():
-        category_training = [image for image in training_images if any([annotation.category_name == category for annotation in image.annotations])]
+        category_training = [
+            image
+            for image in training_images
+            if any(annotation.category_name == category for annotation in image.annotations)
+        ]
         augmented_images = generate_augmentations(category_training, number)
         new_augmented_images += augmented_images
     return Dataset(

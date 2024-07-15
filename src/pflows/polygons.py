@@ -1,6 +1,8 @@
 from typing import Tuple, Sequence
 
+import numpy as np
 from shapely.geometry import Polygon, MultiPolygon
+from shapely.validation import make_valid
 
 from pflows.typedef import Annotation
 
@@ -13,6 +15,8 @@ def calculate_center_from_bbox(bbox: Tuple[float, float, float, float]) -> Tuple
 
 
 def calculate_center_from_polygon(polygon: Tuple[float, ...]) -> Tuple[float, float]:
+    if len(polygon) == 0:
+        return None
     x = [polygon[i] for i in range(0, len(polygon), 2)]
     y = [polygon[i] for i in range(1, len(polygon), 2)]
     return (round(sum(x) / len(x), ROUNDING), round(sum(y) / len(y), ROUNDING))
@@ -65,3 +69,30 @@ def merge_polygons(polygons: Sequence[Tuple[float, ...]]) -> Tuple[float, ...]:
     merged_coords = list(merged_polygon.exterior.coords)
     merged_coords = [coord for point in merged_polygon.exterior.coords for coord in point]
     return tuple(float(coord) for coord in merged_coords)
+
+
+def iou_polygons(a: Tuple[float, ...], b: Tuple[float, ...]) -> float:
+    # Convert tuples to numpy arrays
+    a_array = np.array(a).reshape(-1, 2)
+    b_array = np.array(b).reshape(-1, 2)
+
+    # Create polygon objects
+    poly_a = Polygon(a_array)
+    poly_b = Polygon(b_array)
+
+    # Ensure polygons are valid
+    poly_a = make_valid(poly_a)
+    poly_b = make_valid(poly_b)
+
+    try:
+        # Calculate intersection and union areas
+        intersection_area = float(poly_a.intersection(poly_b).area)
+        union_area = float(poly_a.area + poly_b.area - intersection_area)
+
+        # Calculate IoU
+        iou = intersection_area / union_area if union_area > 0 else 0.0
+
+        return iou
+    except Exception as e:
+        print(f"Error calculating IoU: {str(e)}")
+        return 0.0  # Return 0 if there's an error

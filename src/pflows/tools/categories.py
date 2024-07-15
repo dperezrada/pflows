@@ -193,3 +193,105 @@ def group_categories(
         ],
         groups=dataset.groups,
     )
+
+
+def remap_category_ids(dataset: Dataset) -> Dataset:
+    """
+    Remaps the category ids in a dataset to be contiguous integers starting from 0.
+    """
+
+    category_names = sorted(list(set(category.name for category in dataset.categories)))
+    new_categories = [
+        Category(
+            id=index,
+            name=name,
+        )
+        for index, name in enumerate(category_names)
+    ]
+
+    # Remap the category ids
+    category_map = {category.name: category.id for category in new_categories}
+    new_images = [
+        Image(
+            **{
+                **asdict(image),
+                "annotations": [
+                    Annotation(
+                        **{
+                            **asdict(annotation),
+                            "category_id": category_map[annotation.category_name],
+                        }
+                    )
+                    for annotation in image.annotations
+                ],
+            }
+        )
+        for image in dataset.images
+    ]
+    return Dataset(
+        images=new_images,
+        categories=new_categories,
+        groups=dataset.groups,
+    )
+
+
+def remap_categories(dataset: Dataset, mapping: dict[str, str]) -> Dataset:
+    """
+    Renames categories in a dataset based on the provided category map.
+
+    Args:
+        dataset: The input dataset containing images and annotations.
+        category_map: A dictionary specifying the mapping of old category names to new category names.
+
+    Returns:
+        A new dataset with the categories renamed according to the specified category map.
+
+    Example:
+        # Define the category map
+        category_map = {
+            "11": "A",
+            "12": "B",
+            "13": "C",
+            ...
+        }
+
+        # Call the rename_categories function
+        new_dataset = rename_categories(dataset, category_map)
+
+        # The new_dataset will contain categories renamed according to the specified category map.
+        # For example, categories "11", "12", and "13" will be renamed to "A", "B", and "C"
+        # respectively.
+    """
+    new_category_names = list(set(mapping.values()))
+    new_categories = [
+        Category(
+            id=index,
+            name=name,
+        )
+        for index, name in enumerate(new_category_names)
+    ]
+    return remap_category_ids(
+        Dataset(
+            images=[
+                Image(
+                    **{
+                        **asdict(image),
+                        "annotations": [
+                            Annotation(
+                                **{
+                                    **asdict(annotation),
+                                    "category_name": mapping.get(
+                                        annotation.category_name, annotation.category_name
+                                    ),
+                                }
+                            )
+                            for annotation in image.annotations
+                        ],
+                    }
+                )
+                for image in dataset.images
+            ],
+            categories=new_categories,
+            groups=dataset.groups,
+        )
+    )

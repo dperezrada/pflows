@@ -15,6 +15,7 @@ import numpy as np
 from skimage.measure import approximate_polygon
 from numpy.typing import NDArray
 
+from pflows.tools.categories import remap_category_ids
 from pflows.typedef import Annotation, Category, Dataset
 from pflows.polygons import (
     calculate_center_from_bbox,
@@ -187,7 +188,7 @@ def run_model_on_image(
     model: YOLO,
     model_categories: List[str] | None = None,
     threshold: float = 0.5,
-    segment_tolerance: float = 0.02,
+    segment_tolerance: float = 0,
     preprocess_function: Callable[[ImagePil.Image], NDArray[np.uint8]] = preprocess_image,
     add_tag: str | None = None,
 ) -> List[Annotation]:
@@ -213,12 +214,18 @@ def run_model_on_image(
 
                 points = np_mask.ravel().tolist()
                 polygon_array = np.array(points).reshape(-1, 2)
-                simplified_polygon = approximate_polygon(
-                    polygon_array, tolerance=segment_tolerance
-                )  # type: ignore[no-untyped-call]
+                # We didn't got good results with the approximate_polygon
+                # simplified_polygon = approximate_polygon(
+                #     polygon_array, tolerance=segment_tolerance
+                # )  # type: ignore[no-untyped-call]
+                # simplified_points = tuple(
+                #     round(x, ROUNDING) for x in simplified_polygon.flatten().tolist()
+                # )
                 simplified_points = tuple(
-                    round(x, ROUNDING) for x in simplified_polygon.flatten().tolist()
+                    round(x, ROUNDING) for x in polygon_array.flatten().tolist()
                 )
+                if len(simplified_points) < 4:
+                    continue
 
                 joined_points = ", ".join(str(x) for x in simplified_points)
                 hash_id = md5(
@@ -395,7 +402,7 @@ def run_model(
     dataset.categories = [
         Category(name=name, id=index) for index, name in enumerate(new_categories)
     ]
-    return dataset
+    return remap_category_ids(dataset)
 
 
 # TODO: refactor

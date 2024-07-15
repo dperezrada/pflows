@@ -132,6 +132,7 @@ def load_image(image_path, selected_category, legend_image, classes, colors, ini
     with open(label_path, "r") as file:
         for line in file:
             yolo_output.append([float(x) for x in line.split(" ")])
+    print(label_path)
 
     yaml_dir = image_path.split("/images/")[0]
     if yaml_dir == image_path:

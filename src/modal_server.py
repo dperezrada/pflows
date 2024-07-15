@@ -74,7 +74,7 @@ def set_env(env_variables: Dict[str, Any], job_id: str) -> None:
 
 @app.function(
     image=image,
-    timeout=5 * 60 * 60,
+    timeout=7 * 60 * 60,
     volumes={"/root/jobs_data": jobs_volume, "/root/uploads_data": uploads_volume},
 )
 def endpoint_run_workflow_cpu(
@@ -92,7 +92,7 @@ def endpoint_run_workflow_cpu(
 @app.function(
     image=image_gpu,
     gpu=GPU_TYPE,
-    timeout=5 * 60 * 60,
+    timeout=7 * 60 * 60,
     volumes={"/root/jobs_data": jobs_volume, "/root/uploads_data": uploads_volume},
 )
 def endpoint_run_workflow_gpu(

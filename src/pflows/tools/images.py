@@ -1,5 +1,6 @@
 import math
 import tempfile
+import colorsys
 from dataclasses import asdict
 from typing import List
 from uuid import uuid4
@@ -7,6 +8,7 @@ from uuid import uuid4
 # from shapely.geometry import Polygon, MultiPolygon, Point, LineString
 import cv2
 from PIL import Image as ImagePil
+from PIL import ImageDraw
 from shapely.geometry import Polygon
 from shapely.ops import transform
 import numpy as np
@@ -142,7 +144,7 @@ def get_segmentation_annotations_from_sliced_image(
     sliced_annotations = []
     w, h = sliced_image.width, sliced_image.height
 
-    for annotation in original_image.annotations:
+    for annotation in original_image.annotations or []:
         mask = create_mask(annotation, original_image.width, original_image.height)
         cropped_mask, truncated = crop_mask(mask, crop_x, crop_y, w, h)
         polygons = generate_polygons_from_mask(cropped_mask)
@@ -254,7 +256,10 @@ def slice_one_image(
 
     temp_folder = tempfile.mkdtemp()
 
-    task_type = image.annotations[0].task
+    try:
+        task_type = image.annotations[0].task
+    except:
+        task_type = "detect"
     # Only detect or segment is supported for now
     if not task_type in ["detect", "segment"]:
         return [image]
@@ -322,12 +327,83 @@ def slice_one_image(
     return sliced_images
 
 
-def select_best_images_from_slices(sliced_images: List[Image]) -> List[Image]:
+# def select_best_images_from_slices(sliced_images: List[Image]) -> List[Image]:
+#     # Step 1: Count the number of non-truncated annotations for each image
+#     image_scores = []
+#     images_by_id = {image.id: image for image in sliced_images}
+#     for image in sliced_images:
+#         non_truncated_count = sum(1 for annotation in image.annotations if not annotation.truncated)
+#         image_scores.append((image.id, non_truncated_count))
+
+#     # Step 2: Sort images by the number of non-truncated annotations in descending order
+#     image_scores.sort(key=lambda x: x[1], reverse=True)
+
+#     # Step 3: Select images, ensuring all annotations are covered at least once
+#     selected_images = set()
+#     covered_annotations = set()
+
+#     # Function to get annotations for an image
+#     def get_annotations(image_id):
+#         for image in sliced_images:
+#             if image.id == image_id:
+#                 return image.annotations
+#         return []
+
+#     all_annotations = {
+#         annotation.original_id for image in sliced_images for annotation in image.annotations
+#     }
+
+#     for image_id, _ in image_scores:
+#         annotations = get_annotations(image_id)
+#         current_coverage = {
+#             annotation.original_id for annotation in annotations if not annotation.truncated
+#         }
+#         if not current_coverage.issubset(covered_annotations):
+#             selected_images.add(image_id)
+#             covered_annotations.update(current_coverage)
+#         if covered_annotations == all_annotations:
+#             break
+
+#     # Output the selected images
+#     return [images_by_id[image_id] for image_id in selected_images]
+
+
+def is_truncated(annotation: Annotation, image: Image, border_tolerance: int = 10) -> bool:
+    if annotation.bbox:
+        x1, y1, x2, y2 = annotation.bbox
+        return (
+            x1 * image.width < border_tolerance
+            or y1 * image.height < border_tolerance
+            or x2 * image.width > image.width - border_tolerance
+            or y2 * image.height > image.height - border_tolerance
+        )
+    elif annotation.segmentation:
+        points = annotation.segmentation
+        for i in range(0, len(points), 2):
+            x, y = points[i] * image.width, points[i + 1] * image.height
+            if (
+                x < border_tolerance
+                or y < border_tolerance
+                or x > image.width - border_tolerance
+                or y > image.height - border_tolerance
+            ):
+                return True
+        return False
+    return False
+
+
+def select_best_images_from_slices(
+    sliced_images: List[Image], border_tolerance: int = 10
+) -> List[Image]:
     # Step 1: Count the number of non-truncated annotations for each image
     image_scores = []
     images_by_id = {image.id: image for image in sliced_images}
     for image in sliced_images:
-        non_truncated_count = sum(1 for annotation in image.annotations if not annotation.truncated)
+        non_truncated_count = sum(
+            1
+            for annotation in image.annotations
+            if not is_truncated(annotation, image, border_tolerance)
+        )
         image_scores.append((image.id, non_truncated_count))
 
     # Step 2: Sort images by the number of non-truncated annotations in descending order
@@ -339,10 +415,7 @@ def select_best_images_from_slices(sliced_images: List[Image]) -> List[Image]:
 
     # Function to get annotations for an image
     def get_annotations(image_id):
-        for image in sliced_images:
-            if image.id == image_id:
-                return image.annotations
-        return []
+        return images_by_id[image_id].annotations
 
     all_annotations = {
         annotation.original_id for image in sliced_images for annotation in image.annotations
@@ -351,7 +424,9 @@ def select_best_images_from_slices(sliced_images: List[Image]) -> List[Image]:
     for image_id, _ in image_scores:
         annotations = get_annotations(image_id)
         current_coverage = {
-            annotation.original_id for annotation in annotations if not annotation.truncated
+            annotation.original_id
+            for annotation in annotations
+            if not is_truncated(annotation, images_by_id[image_id], border_tolerance)
         }
         if not current_coverage.issubset(covered_annotations):
             selected_images.add(image_id)
@@ -393,7 +468,7 @@ def join_slices(sliced_images: List[Image]) -> List[Image]:
         already_added = set()
         # Step 3: We need to adjust the annotations for the joined image
         # using the new width and height
-        for slice_image in slices[1:]:
+        for slice_image in slices:
             for annotation in slice_image.annotations:
                 if annotation.id in already_added:
                     continue
@@ -456,6 +531,7 @@ def slice_dataset(
     overlap_width_ratio: float = 0.1,
     keep_original_images: bool = False,
     select_best: bool = True,
+    border_tolerance: int = 10,
 ) -> Dataset:
     sliced_images = []
     for image in dataset.images:
@@ -470,7 +546,7 @@ def slice_dataset(
             )
         )
     if select_best:
-        sliced_images = select_best_images_from_slices(sliced_images)
+        sliced_images = select_best_images_from_slices(sliced_images, border_tolerance)
     return Dataset(images=sliced_images, categories=dataset.categories, groups=dataset.groups)
 
 
@@ -479,3 +555,39 @@ def join_slice_dataset(
 ) -> Dataset:
     joined_images = join_slices(dataset.images)
     return Dataset(images=joined_images, categories=dataset.categories, groups=dataset.groups)
+
+
+def write_image_with_annotations(image: Image, target_image_path: str | None = None):
+    img = ImagePil.open(image.path)
+    img = img.convert("RGB")
+    draw = ImageDraw.Draw(img)
+
+    # Generate a color map for different class_ids
+    unique_class_ids = set(ann.category_id for ann in image.annotations)
+    color_map = {
+        class_id: tuple(
+            int(x * 255) for x in colorsys.hsv_to_rgb(i / len(unique_class_ids), 1.0, 1.0)
+        )
+        for i, class_id in enumerate(unique_class_ids)
+    }
+
+    for annotation in image.annotations:
+        color = color_map[annotation.category_id]
+        if annotation.segmentation:
+            segmentation = annotation.segmentation
+            points = [
+                (segmentation[i] * image.width, segmentation[i + 1] * image.height)
+                for i in range(0, len(segmentation), 2)
+            ]
+            draw.polygon(points, outline=color)
+        elif annotation.bbox:
+            x1, y1, x2, y2 = annotation.bbox
+            x1 = x1 * image.width
+            y1 = y1 * image.height
+            x2 = x2 * image.width
+            y2 = y2 * image.height
+            draw.rectangle([x1, y1, x2, y2], outline=color, width=2)
+
+    if target_image_path:
+        img.save(target_image_path)
+    return img

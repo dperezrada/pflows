@@ -20,10 +20,23 @@ def count_images(dataset: Dataset) -> Dict[str, int]:
     return {"count": len(dataset.images)}
 
 
-def count_categories(dataset: Dataset) -> Dict[str, int]:
+def count_categories(dataset: Dataset) -> Dict[str, Any]:
     print()
     print("total categories: ", len(dataset.categories))
-    return {"count": len(dataset.categories)}
+    # We count from annotations
+    total_categories = {}
+    categories_names = {}
+    for image in dataset.images:
+        for annotation in image.annotations:
+            if annotation.category_id in total_categories:
+                total_categories[annotation.category_id] += 1
+            else:
+                categories_names[annotation.category_id] = annotation.category_name
+                total_categories[annotation.category_id] = 1
+    print("Total Categories in annotations: ", len(total_categories))
+    for category_id, total in total_categories.items():
+        print("\t", category_id, categories_names[category_id], ":", total)
+    return {"count": len(dataset.categories), "total_categories": total_categories}
 
 
 def show_categories(dataset: Dataset) -> None:
@@ -92,6 +105,14 @@ def load_images(
     print("recursive:", recursive)
     images: List[Image] = []
     for folder_path in paths:
+        if not os.path.exists(folder_path):
+            continue
+        # If the path is a file we load it as an image
+        if os.path.isfile(folder_path):
+            print("loading image", folder_path)
+            image_info = get_image_info(folder_path, "train")
+            images.append(image_info)
+            continue
         found_images = read_images_from_folder(folder_path, recursive=recursive)
         print("loaded images", len(found_images))
         images += found_images

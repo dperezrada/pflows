@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 
 from pflows.workflow import run_workflow
 
-load_dotenv()
+load_dotenv(".env")
 
 
 def format_output(output_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -24,10 +24,12 @@ def main() -> None:
     parser.add_argument(
         "--output_json", default=None, type=str, help="Path to the output JSON file"
     )
+    parser.add_argument("--env", default=None, type=str, help="Path to another env")
     args = parser.parse_args()
 
     worflow_path = args.workflow_path
     output_json = args.output_json
+    env_path = args.env
 
     if not worflow_path:
         parser.error("The 'workflow_path' argument is required.")
@@ -35,6 +37,8 @@ def main() -> None:
     output_key = "job"
 
     try:
+        if env_path:
+            load_dotenv(env_path)
         output_data = run_workflow(
             args.workflow_path, store_dict=output_data, store_dict_key=output_key
         )

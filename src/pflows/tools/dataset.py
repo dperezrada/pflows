@@ -1,8 +1,9 @@
+import json
 import math
 from pathlib import Path
 import random
 from typing import Any, Dict, List, Tuple
-from pflows.typedef import Dataset, Image
+from pflows.typedef import Annotation, Category, Dataset, Image
 
 
 # pylint: disable=too-many-locals
@@ -93,7 +94,7 @@ def assign_groups(
     return images
 
 
-def show_dataset(dataset: Dataset) -> Dict[str, Any]:
+def write_json_dataset(dataset: Dataset, target_path=None) -> Dataset:
     to_return = []
     for image in dataset.images:
         to_return.append(
@@ -102,8 +103,43 @@ def show_dataset(dataset: Dataset) -> Dict[str, Any]:
                 "annotations": [annotation.__dict__ for annotation in image.annotations],
             }
         )
-    return {
-        "images": to_return,
-        "categories": [category.__dict__ for category in dataset.categories],
-        "groups": dataset.groups,
-    }
+    if target_path is None:
+        # generate temporary file
+        target_path = Path("dataset.json")
+
+    with open(target_path, "w") as file:
+        file.write(
+            json.dumps(
+                {
+                    "images": to_return,
+                    "categories": [category.__dict__ for category in dataset.categories],
+                    "groups": dataset.groups,
+                },
+                indent=4,
+                ensure_ascii=False,
+            )
+        )
+    print("Dataset written to", target_path)
+
+    return dataset
+
+
+def read_json_dataset(dataset: Dataset | None = None, target_path=None) -> Dataset:
+    if target_path is None:
+        # generate temporary file
+        target_path = Path("dataset.json")
+
+    with open(target_path, "r") as file:
+        data = json.load(file)
+        images = []
+        for image in data["images"]:
+            annotations = []
+            for annotation in image["annotations"]:
+                annotations.append(Annotation(**annotation))
+            images.append(Image(**{**image, "annotations": annotations}))  # type: ignore
+        categories = []
+        for category in data["categories"]:
+            categories.append(Category(**category))
+        return Dataset(images=images, categories=categories, groups=data["groups"])
+
+    return dataset

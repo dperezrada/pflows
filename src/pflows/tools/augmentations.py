@@ -55,25 +55,6 @@ def get_new_polygon(
     )
 
 
-def iou_polygons(a: Tuple[float, ...], b: Tuple[float, ...]) -> float:
-    # Convert tuples to numpy arrays
-    a_array = np.array(a).reshape(-1, 2)
-    b_array = np.array(b).reshape(-1, 2)
-
-    # Create polygon objects
-    poly_a = Polygon(a_array)
-    poly_b = Polygon(b_array)
-
-    # Calculate intersection and union areas
-    intersection_area = float(poly_a.intersection(poly_b).area)
-    union_area = float(poly_a.area + poly_b.area - intersection_area)
-
-    # Calculate IoU
-    iou = intersection_area / union_area
-
-    return iou
-
-
 def get_new_polygons(transformed_mask: Any, width: int, height: int) -> List[Tuple[float, ...]]:
     new_polygons = []
     for polygon_id in np.unique(transformed_mask):
@@ -81,6 +62,34 @@ def get_new_polygons(transformed_mask: Any, width: int, height: int) -> List[Tup
             new_polygon = get_new_polygon(transformed_mask, polygon_id, width, height)
             new_polygons.append(new_polygon)
     return new_polygons
+
+
+def apply_augmentation_with_multiple_masks(image, polygons, transform):
+    height, width = image.shape[:2]
+
+    # Create a single multi-channel mask
+    num_polygons = len(polygons)
+    multi_mask = np.zeros((height, width, num_polygons), dtype=np.uint8)
+
+    for index, polygon_data in enumerate(polygons):
+        mask = np.zeros((height, width), dtype=np.uint8)
+        pts = np.array(
+            [polygon_data[i : i + 2] for i in range(0, len(polygon_data), 2)], dtype=np.int32
+        )
+        cv2.fillPoly(mask, [pts], 1)
+        multi_mask[:, :, index] = mask
+
+    # Apply the transformation
+    transformed = transform(image=image, masks=[multi_mask])
+    transformed_image = transformed["image"]
+    transformed_multi_mask = transformed["masks"][0]
+
+    # Get new polygons from each channel of the transformed multi-mask
+    new_polygons = []
+    for channel in range(num_polygons):
+        new_polygons.extend(get_new_polygons(transformed_multi_mask[:, :, channel], width, height))
+
+    return transformed_image, new_polygons
 
 
 # pylint: disable=too-many-locals,too-many-arguments
@@ -112,51 +121,34 @@ def generate_augmented_image(
             polygons.append(polygon)
 
         new_polygons = []
-        try:
-            transform = A.Compose(
-                [
-                    A.Affine(
-                        rotate=(-1.5, 1.5),
-                        translate_percent=(-0.015, 0.015),
-                        scale=(1, 1.2),
-                        shear=(-2, 2),
-                        p=1.0,
-                    ),
-                    A.Defocus(radius=(3, 8), alias_blur=(0.1, 0.4), p=0.7),
-                    A.CLAHE(clip_limit=2, p=0.9),
-                    A.RandomBrightnessContrast(
-                        p=0.5, brightness_limit=(-0.1, 0.1), contrast_limit=0.2
-                    ),
-                    A.MultiplicativeNoise(multiplier=(0.8, 1.2), per_channel=True, p=0.2),
-                    A.GaussNoise(var_limit=(20, 80), mean=50, p=0.8),
-                    A.ElasticTransform(alpha=1, sigma=25, alpha_affine=25, p=1.0),
-                ]
-            )
+        # try:
+        transform = A.Compose(
+            [
+                A.Affine(
+                    rotate=(-1.5, 1.5),
+                    translate_percent=(-0.015, 0.015),
+                    scale=(1, 1.2),
+                    shear=(-2, 2),
+                    p=1.0,
+                ),
+                A.Defocus(radius=(3, 8), alias_blur=(0.1, 0.4), p=0.7),
+                A.CLAHE(clip_limit=2, p=0.9),
+                A.RandomBrightnessContrast(p=0.5, brightness_limit=(-0.1, 0.1), contrast_limit=0.2),
+                A.MultiplicativeNoise(multiplier=(0.8, 1.2), per_channel=True, p=0.2),
+                A.GaussNoise(var_limit=(20, 80), mean=50, p=0.8),
+                A.ElasticTransform(alpha=1, sigma=25, alpha_affine=25, p=1.0),
+            ]
+        )
 
-            mask = np.zeros((height, width), dtype=np.uint8)
-            for index, polygon_data in enumerate(polygons):
-                pts = np.array(
-                    [polygon_data[i : i + 2] for i in range(0, len(polygon_data), 2)],
-                    dtype=np.int32,
-                )
-                cv2.fillPoly(mask, [pts], index + 1)  # Use unique IDs as pixel values
+        transformed_image, new_polygons = apply_augmentation_with_multiple_masks(
+            image, polygons, transform
+        )
+        # except Exception:
+        #     continue
 
-            # Apply the transformation
-            transformed = transform(image=image, mask=mask)
-            transformed_image = transformed["image"]
-            transformed_mask = transformed["mask"]
-
-            new_polygons = get_new_polygons(transformed_mask, width, height)
-            # if len(new_polygons) != len(polygons):
-            #     print(f"\tFailed {new_id} {len(new_polygons)} != {len(polygons)}")
-            #     continue
-            # pylint: disable=broad-exception-caught
-        except Exception:
-            continue
-
-            # if len(new_polygons) == 0:
-            #     print(f"\tFailed {new_id} no polygons")
-            #     continue
+        # if len(new_polygons) == 0:
+        #     print(f"\tFailed {new_id} no polygons")
+        #     continue
         break
 
     cv2.imwrite(target_file, transformed_image)

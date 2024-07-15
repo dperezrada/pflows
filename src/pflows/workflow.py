@@ -160,6 +160,45 @@ def read_local_workflow(workflow_path: str) -> Tuple[Sequence[Dict[str, Any]], s
     return workflow, workflow_dir
 
 
+def internal_run_workflow(
+    workflow: Sequence[Task],
+    workflow_data: Dict[str, Any],
+    store_dict: Dict[str, Any] | None = None,
+    store_dict_key: str | None = None,
+    id_output_data: Dict[str, Any] = {},
+) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    for task in workflow:
+        print("")
+        print("-" * 20, task.task, "-" * 20)
+        if task.skip:
+            print("Skipping task.")
+            continue
+        params = {
+            param: (
+                task.params[param]
+                if task.params[param] != "__workflow_parameter__"
+                else workflow_data[param]
+            )
+            for param in task.params
+        }
+        result = task.function(**params)
+        if result is not None and isinstance(result, dict):
+            workflow_data.update(result)
+            # get result without the dataset key
+            if task.id is not None:
+                id_output_data[task.id] = {
+                    key: value for key, value in result.items() if key != "dataset"
+                }
+                if store_dict is not None and store_dict_key is not None and result != {}:
+                    store_dict[store_dict_key] = {
+                        **store_dict[store_dict_key],
+                        **id_output_data,
+                    }
+        if result is not None and isinstance(result, Dataset):
+            workflow_data["dataset"] = result
+    return workflow_data, id_output_data
+
+
 def run_workflow(
     workflow_path: str | None = None,
     raw_workflow: Sequence[Dict[str, Any]] | None = None,
@@ -169,38 +208,29 @@ def run_workflow(
     workflow, workflow_data = read_workflow(workflow_path, raw_workflow)
     id_output_data = {}
     try:
-        for task in workflow:
-            print("")
-            print("-" * 20, task.task, "-" * 20)
-            if task.skip:
-                print("Skipping task.")
-                continue
-            params = {
-                param: (
-                    task.params[param]
-                    if task.params[param] != "__workflow_parameter__"
-                    else workflow_data[param]
-                )
-                for param in task.params
-            }
-            result = task.function(**params)
-            if result is not None and isinstance(result, dict):
-                workflow_data.update(result)
-                # get result without the dataset key
-                if task.id is not None:
-                    id_output_data[task.id] = {
-                        key: value for key, value in result.items() if key != "dataset"
-                    }
-                    if store_dict is not None and store_dict_key is not None and result != {}:
-                        store_dict[store_dict_key] = {
-                            **store_dict[store_dict_key],
-                            **id_output_data,
-                        }
-            if result is not None and isinstance(result, Dataset):
-                workflow_data["dataset"] = result
+        workflow_data, id_output_data = internal_run_workflow(
+            workflow, workflow_data, store_dict, store_dict_key, id_output_data
+        )
+
     except SystemExit:
         pass
     if store_dict is not None and store_dict_key is not None:
         store_dict[store_dict_key] = {**store_dict[store_dict_key], **id_output_data}
         return cast(Dict[str, Any], store_dict[store_dict_key])
     return id_output_data
+
+
+def run_workflow_dataset(
+    workflow_path: str | None = None,
+    raw_workflow: Sequence[Dict[str, Any]] | None = None,
+    store_dict: Dict[str, Any] | None = None,
+    store_dict_key: str | None = None,
+) -> Dataset:
+    workflow, workflow_data = read_workflow(workflow_path, raw_workflow)
+    try:
+        workflow_data, _ = internal_run_workflow(
+            workflow, workflow_data, store_dict, store_dict_key
+        )
+    except SystemExit:
+        pass
+    return cast(Dataset, workflow_data["dataset"])

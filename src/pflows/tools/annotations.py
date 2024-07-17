@@ -125,23 +125,24 @@ def remove_annotations(
     )
 
 
-def chaikin_smooth(raw_polygon, iterations=1):
-    # raw_polygon is comming in the format of [(x1, y1, x2, y2, ...]  we need to convert it to [(x1, y1), (x2, y2), ...]
+def chaikin_smooth(raw_polygon, iterations=5, tension=0.75):
+    # Convert raw_polygon to [(x1, y1), (x2, y2), ...]
     polygon = [(raw_polygon[i], raw_polygon[i + 1]) for i in range(0, len(raw_polygon), 2)]
+
     for _ in range(iterations):
         smoothed = []
         for i in range(len(polygon)):
             x0, y0 = polygon[i]
             x1, y1 = polygon[(i + 1) % len(polygon)]
 
-            # Create two new points
-            smoothed.append((0.75 * x0 + 0.25 * x1, 0.75 * y0 + 0.25 * y1))
-            smoothed.append((0.25 * x0 + 0.75 * x1, 0.25 * y0 + 0.75 * y1))
+            # Create two new points using the tension parameter
+            smoothed.append((tension * x0 + (1 - tension) * x1, tension * y0 + (1 - tension) * y1))
+            smoothed.append(((1 - tension) * x0 + tension * x1, (1 - tension) * y0 + tension * y1))
 
         polygon = smoothed
 
-    # Convert back to the format of [(x1, y1, x2, y2, ...]
-    return [point for pair in polygon for point in pair]
+    # Convert back to the format of [x1, y1, x2, y2, ...]
+    return [coord for point in polygon for coord in point]
 
 
 def b_spline_smoothing(polygon, smoothness=0.0005, num_points=70):
@@ -171,13 +172,14 @@ def smooth_segments(
     smoothness: float = 0.0005,
     num_points: int = 70,
     smooth_iterations: int = 1,
+    tension: float = 0.75,
 ) -> Dataset:
     if technique == "spline":
         smooth_polygon = b_spline_smoothing
         args = {"smoothness": smoothness, "num_points": num_points}
     elif technique == "chaikin":
         smooth_polygon = chaikin_smooth
-        args = {"iterations": smooth_iterations}
+        args = {"iterations": smooth_iterations, "tension": tension}
     else:
         raise ValueError("Invalid smoothing technique")
     return Dataset(

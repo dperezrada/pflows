@@ -225,12 +225,15 @@ def run_workflow_dataset(
     raw_workflow: Sequence[Dict[str, Any]] | None = None,
     store_dict: Dict[str, Any] | None = None,
     store_dict_key: str | None = None,
+    dataset: Dataset | None = None,
 ) -> Dataset:
     workflow, workflow_data = read_workflow(workflow_path, raw_workflow)
+    if dataset is not None:
+        workflow_data["dataset"] = dataset
     try:
         workflow_data, _ = internal_run_workflow(
             workflow, workflow_data, store_dict, store_dict_key
         )
     except SystemExit:
         pass
-    return cast(Dataset, workflow_data["dataset"])
+    return Dataset.from_dict(workflow_data["dataset"])

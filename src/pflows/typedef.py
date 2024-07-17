@@ -1,7 +1,7 @@
 # pylint: disable=R0902
 
 import random
-from dataclasses import dataclass, field, replace
+from dataclasses import asdict, dataclass, field, replace
 
 from PIL import Image as PILImage, ImageDraw
 
@@ -45,6 +45,15 @@ class Annotation:
                 + (self.center[1] - other_annotation.center[1]) ** 2
             ) ** 0.5
         return -1.0
+
+    def dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data):
+        if isinstance(data, cls):
+            return data
+        return cls(**data)
 
 
 @dataclass
@@ -132,12 +141,36 @@ class Image:
 
         return img
 
+    def dict(self) -> Dict[str, Any]:
+        return {**asdict(self), "annotations": [ann.dict() for ann in self.annotations]}
+
+    @classmethod
+    def from_dict(cls, data):
+        if isinstance(data, cls):
+            return data
+        annotations: List[Annotation] = [
+            Annotation.from_dict(ann) for ann in data.get("annotations", [])
+        ]
+        return cls(**data, annotations=annotations)
+
 
 @dataclass
 class Dataset:
     images: List[Image]
     categories: List[Category]
     groups: List[str]
+
+    @classmethod
+    def from_dict(cls, data):
+        raw_images = data.images if hasattr(data, "images") else data.get("images", [])
+        images = [Image.from_dict(img) for img in raw_images]
+        categories = (
+            data.categories
+            if hasattr(data, "categories")
+            else [Category(**cat) for cat in data.get("categories", [])]
+        )
+        groups = data.groups if hasattr(data, "groups") else data.get("groups", [])
+        return cls(images=images, categories=categories, groups=groups)
 
 
 @dataclass

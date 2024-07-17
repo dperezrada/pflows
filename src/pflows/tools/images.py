@@ -293,6 +293,8 @@ def slice_one_image(
 
             sliced_img = img.crop((left, top, right, bottom))
             sliced_path = f"{temp_folder}/slice_{image.id}_{left}_{top}_{right}_{bottom}.jpg"
+            if sliced_img.mode == "RGBA":
+                sliced_img = sliced_img.convert("RGB")
             sliced_img.save(sliced_path)
             sliced_image = Image(
                 id=f"{image.id}_{len(sliced_images)}",

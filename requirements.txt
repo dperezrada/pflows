@@ -13,3 +13,4 @@ fastapi-cli==0.0.4
 modal==0.62.181
 requests==2.31.0
 requests-toolbelt==1.0.0
+numpy==1.26.4

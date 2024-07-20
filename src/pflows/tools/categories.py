@@ -116,6 +116,10 @@ def group_categories(
     categories_names = list(groups.keys())
     for image in dataset.images:
         new_annotations = []
+        all_replace_categories = [el for rows in groups.values() for row in rows for el in row]
+        task = [
+            ann.task for ann in image.annotations if ann.category_name in all_replace_categories
+        ][0]
         for new_category, replace_category_groups in groups.items():
             polygon = None
             for replace_category_group in replace_category_groups:

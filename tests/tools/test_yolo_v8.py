@@ -11,8 +11,9 @@ model_path = Path(__file__).parent / "yolov8n.pt"
 def test_run_model(dataset):
     sampled_dataset = sample(dataset, number=1, offset=6, sort="id")
     total_initial_annotations = len(sampled_dataset.images[0].annotations)
-    new_dataset = run_model(sampled_dataset, str(model_path), add_tag="yolov8n")
+    new_dataset = run_model(sampled_dataset, str(model_path), add_tag="yolov8n", threshold=0.01)
     image_data = new_dataset.images[0]
+    print(image_data.annotations)
     assert len(image_data.annotations) > total_initial_annotations
 
 

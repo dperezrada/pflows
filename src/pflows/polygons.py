@@ -3,6 +3,7 @@ from typing import Tuple, Sequence
 import numpy as np
 from shapely.geometry import Polygon, MultiPolygon
 from shapely.validation import make_valid
+from shapely.errors import TopologicalError
 
 from pflows.typedef import Annotation
 
@@ -93,6 +94,12 @@ def iou_polygons(a: Tuple[float, ...], b: Tuple[float, ...]) -> float:
         iou = intersection_area / union_area if union_area > 0 else 0.0
 
         return iou
+    except (TopologicalError, ValueError) as e:
+        print(f"Error calculating IoU: {e}. This may be due to invalid polygon geometries.")
+        return 0.0
+    except ZeroDivisionError:
+        print("Error calculating IoU: Union area is zero. The polygons might be empty or invalid.")
+        return 0.0
     except Exception as e:
-        print(f"Error calculating IoU: {str(e)}")
-        return 0.0  # Return 0 if there's an error
+        print(f"Error calculating IoU: {e}")
+        return 0.0

@@ -104,3 +104,22 @@ def by_group(dataset: Dataset, group: str) -> Dataset:
         categories=dataset.categories,
         groups=dataset.groups,
     )
+
+
+def by_category_name(
+    dataset: Dataset, include: List[str] | None = None, exclude: List[str] | None = None
+) -> Dataset:
+    include = include or []
+    exclude = exclude or []
+    filtered_images = []
+
+    for image in dataset.images:
+        category_names = set(ann.category_name for ann in image.annotations)
+
+        if exclude and any(cat in exclude for cat in category_names):
+            continue
+
+        if not include or any(cat in include for cat in category_names):
+            filtered_images.append(image)
+
+    return Dataset(images=filtered_images, categories=dataset.categories, groups=dataset.groups)

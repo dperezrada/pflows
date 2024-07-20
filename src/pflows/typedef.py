@@ -1,12 +1,10 @@
 # pylint: disable=R0902
 
 import random
+from typing import Any, Callable, Dict, List, Optional, Tuple
 from dataclasses import asdict, dataclass, field, replace
 
 from PIL import Image as PILImage, ImageDraw
-
-from typing import Any, Callable, Dict, List, Optional, Tuple
-
 
 def generate_random_color() -> Tuple[int, int, int]:
     return (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))

@@ -108,6 +108,7 @@ def generate_augmented_image(
 
     retry_number = 5
     new_polygons = []
+    transformed_image = None
     for index in range(retry_number):
         if index != 0:
             print(f"\tRetrying {index} for {new_id}")
@@ -121,36 +122,42 @@ def generate_augmented_image(
             polygons.append(polygon)
 
         new_polygons = []
-        # try:
-        transform = A.Compose(
-            [
-                A.Affine(
-                    rotate=(-1.5, 1.5),
-                    translate_percent=(-0.015, 0.015),
-                    scale=(1, 1.2),
-                    shear=(-2, 2),
-                    p=1.0,
-                ),
-                A.Defocus(radius=(3, 8), alias_blur=(0.1, 0.4), p=0.7),
-                A.CLAHE(clip_limit=2, p=0.9),
-                A.RandomBrightnessContrast(p=0.5, brightness_limit=(-0.1, 0.1), contrast_limit=0.2),
-                A.MultiplicativeNoise(multiplier=(0.8, 1.2), per_channel=True, p=0.2),
-                A.GaussNoise(var_limit=(20, 80), mean=50, p=0.8),
-                A.ElasticTransform(alpha=1, sigma=25, alpha_affine=25, p=1.0),
-            ]
-        )
+        transformed_image = None
+        try:
+            transform = A.Compose(
+                [
+                    A.Affine(
+                        rotate=(-1.5, 1.5),
+                        translate_percent=(-0.015, 0.015),
+                        scale=(1, 1.2),
+                        shear=(-2, 2),
+                        p=1.0,
+                    ),
+                    A.Defocus(radius=(1, 4), alias_blur=(0.1, 0.2), p=0.6),
+                    A.CLAHE(clip_limit=2, p=0.9),
+                    A.RandomBrightnessContrast(
+                        p=0.5, brightness_limit=(-0.1, 0.1), contrast_limit=0.2
+                    ),
+                    A.MultiplicativeNoise(multiplier=(0.8, 1.2), per_channel=True, p=0.2),
+                    A.GaussNoise(var_limit=(20, 80), mean=50, p=0.8),
+                    A.ElasticTransform(alpha=1, sigma=25, alpha_affine=25, p=1.0),
+                ]
+            )
 
-        transformed_image, new_polygons = apply_augmentation_with_multiple_masks(
-            image, polygons, transform
-        )
-        # except Exception:
-        #     continue
+            transformed_image, new_polygons = apply_augmentation_with_multiple_masks(
+                image, polygons, transform
+            )
+        except Exception:
+            continue
 
-        # if len(new_polygons) == 0:
-        #     print(f"\tFailed {new_id} no polygons")
-        #     continue
+        if len(new_polygons) == 0:
+            print(f"\tFailed {new_id} no polygons")
+            continue
         break
 
+    if transformed_image is None:
+        print(f"\tFailed {new_id} no transformation")
+        return None
     cv2.imwrite(target_file, transformed_image)
     print("image:", total_index)
     return {

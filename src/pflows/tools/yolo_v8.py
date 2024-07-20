@@ -63,7 +63,9 @@ def yolov8_from_bbox(bbox: Tuple[float, float, float, float]) -> Tuple[float, fl
     return x_center, y_center, width, height
 
 
-def process_image_annotations(label_path: str, categories: List[Category]) -> List[Annotation]:
+def process_image_annotations(
+    label_path: str, categories: List[Category], mode: str = "auto"
+) -> List[Annotation]:
     annotations = []
     with open(label_path, "r", encoding="utf-8") as f:
         for index, line in enumerate(f.readlines()):
@@ -73,6 +75,9 @@ def process_image_annotations(label_path: str, categories: List[Category]) -> Li
             # Generate a unique id for the annotation
             data = f"{label_path}_{category_id}_{index}_{', '.join(str(x) for x in polygon_row)}"
             md5_hash = md5(data.encode()).hexdigest()
+            bbox = None
+            polygon = None
+            candidate_task = None
             if len(polygon_row) == 4:
                 bbox_row_tuple = (
                     polygon_row[0],
@@ -81,34 +86,41 @@ def process_image_annotations(label_path: str, categories: List[Category]) -> Li
                     polygon_row[3],
                 )
                 bbox = bbox_from_yolo_v8(bbox_row_tuple)
-                annotations.append(
-                    Annotation(
-                        id=md5_hash,
-                        category_id=category_id,
-                        category_name=categories[category_id].name,
-                        center=calculate_center_from_bbox(bbox),
-                        bbox=bbox,
-                        segmentation=polygon_from_bbox(bbox),
-                        task="detect",
-                    )
-                )
+                polygon = polygon_from_bbox(bbox)
+                task = "detect"
             else:
-                polygon_row_tuple = tuple(polygon_row)
-                annotations.append(
-                    Annotation(
-                        id=md5_hash,
-                        category_id=category_id,
-                        category_name=categories[category_id].name,
-                        center=calculate_center_from_polygon(polygon_row_tuple),
-                        bbox=bbox_from_polygon(polygon_row_tuple),
-                        segmentation=polygon_row_tuple,
-                        task="segment",
-                    )
+                task = "segment"
+                polygon = tuple(polygon_row)
+                bbox = bbox_from_polygon(polygon)
+            if mode == "bbox":
+                task = "detect"
+            elif mode == "segment":
+                task = "segment"
+
+            annotations.append(
+                Annotation(
+                    id=md5_hash,
+                    category_id=category_id,
+                    category_name=categories[category_id].name,
+                    center=calculate_center_from_polygon(polygon),
+                    bbox=bbox,
+                    segmentation=polygon,
+                    task=task,
                 )
+            )
     return annotations
 
 
-def load_dataset(folder_path: str, number: int | None = None) -> Dataset:
+def load_categories(parsed_yaml_file) -> List[Category]:
+    classes = parsed_yaml_file["names"]
+    if isinstance(classes, dict):
+        classes = list(classes.values())
+    return [Category(name=str(cls), id=index) for index, cls in enumerate(classes)]
+
+
+def load_dataset(
+    dataset: Dataset, folder_path: str, number: int | None = None, mode: str = "auto"
+) -> Dataset:
     print()
     print("Loading dataset from yolo_v8 format in: ", folder_path)
     data_yaml = Path(folder_path) / "data.yaml"
@@ -116,7 +128,7 @@ def load_dataset(folder_path: str, number: int | None = None) -> Dataset:
         raise ValueError(f"File {data_yaml} does not exist")
     with open(data_yaml, "r", encoding="utf-8") as f:
         data = yaml.load(f, Loader=yaml.FullLoader)
-        categories = [Category(name=str(x), id=i) for i, x in enumerate(data["names"])]
+        categories = load_categories(data)
         groups = {
             GROUPS_ALIAS[file]: str((Path(folder_path) / file).resolve())
             for file in os.listdir(folder_path)
@@ -142,12 +154,19 @@ def load_dataset(folder_path: str, number: int | None = None) -> Dataset:
                 image_info.annotations = process_image_annotations(
                     str(Path(group_folder) / "labels" / (image_target_path.stem + ".txt")),
                     categories,
+                    mode,
                 )
                 images.append(image_info)
-        return Dataset(
-            images=images,
-            categories=categories,
-            groups=list(groups.keys()),
+        category_names = list(set([category.name for category in categories + dataset.categories]))
+        new_groups = list(set(list(groups.keys()) + dataset.groups))
+        return remap_category_ids(
+            Dataset(
+                images=images + dataset.images,
+                categories=[
+                    Category(name=name, id=index) for index, name in enumerate(category_names)
+                ],
+                groups=new_groups,
+            )
         )
 
 
@@ -162,15 +181,33 @@ def preprocess_image(
     # Convert to numpy array for OpenCV processing
     image_np = np.array(new_image)
 
-    if grayscale:
-        if len(image_np.shape) == 3:
-            image_np = cv2.cvtColor(image_np, cv2.COLOR_RGB2GRAY)
+    # Check the number of channels
+    if len(image_np.shape) == 2 or (len(image_np.shape) == 3 and image_np.shape[2] == 1):
+        # Image is grayscale
+        if not grayscale:
+            # Convert to RGB if color output is desired
             image_np = cv2.cvtColor(image_np, cv2.COLOR_GRAY2RGB)
-        else:
-            # already in grayscale
+    elif len(image_np.shape) == 3:
+        if image_np.shape[2] == 4:
+            # Image is RGBA, convert to RGB
+            image_np = cv2.cvtColor(image_np, cv2.COLOR_RGBA2RGB)
+        elif image_np.shape[2] == 3:
+            # Image is RGB, no conversion needed
             pass
+        else:
+            raise ValueError(f"Unexpected number of channels: {image_np.shape[2]}")
+
+        if grayscale:
+            # Convert to grayscale if grayscale output is desired
+            image_np = cv2.cvtColor(image_np, cv2.COLOR_RGB2GRAY)
+    else:
+        raise ValueError(f"Unexpected image shape: {image_np.shape}")
+
+    if grayscale:
         clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
         image_np = clahe.apply(image_np)
+        if len(image_np.shape) == 2:
+            image_np = cv2.cvtColor(image_np, cv2.COLOR_GRAY2RGB)
     else:
         lab = cv2.cvtColor(image_np, cv2.COLOR_RGB2LAB)
         l, a, b = cv2.split(lab)
@@ -202,7 +239,7 @@ def run_model_on_image(
     annotations = []
     yolo_categories = model.names
     if isinstance(yolo_categories, dict):
-        yolo_categories = [yolo_categories[key] for key in sorted(yolo_categories.keys())]
+        yolo_categories = [str(yolo_categories[key]) for key in sorted(yolo_categories.keys())]
     if model_categories is None:
         model_categories = yolo_categories
     for result in results:
@@ -370,7 +407,8 @@ def run_model(
         name for name in model_names if name not in current_category_names
     ]
     print("New categories found: ", new_categories)
-    for image in dataset.images:
+    total_images = len(dataset.images)
+    for index, image in enumerate(dataset.images):
         model_annotations = run_model_on_image(
             image.path,
             model,
@@ -398,6 +436,13 @@ def run_model(
                 keep_annotations.extend(category_annotations)
 
         image.annotations = image.annotations + keep_annotations
+        if index % 25 == 0:
+            progress_percentage = round((index / total_images) * 100, 2)
+            print()
+            print("-" * 50)
+            print(f"Progress: {progress_percentage}%")
+            print("-" * 50)
+            print()
 
     dataset.categories = [
         Category(name=name, id=index) for index, name in enumerate(new_categories)

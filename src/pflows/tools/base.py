@@ -78,17 +78,24 @@ def find_images_recursively(base_path: str) -> List[str]:
     return found_files
 
 
+def search_images_in_folder(folder: str, recursive: bool = False) -> List[str]:
+    check_folder(folder)
+    # We get all the images in the folder
+    base_folder = Path(folder).resolve()
+    images_paths = []
+    if recursive:
+        images_paths = find_images_recursively(str(base_folder))
+    else:
+        images_paths = [str((base_folder / file).resolve()) for file in os.listdir(base_folder)]
+    return images_paths
+
+
 def read_images_from_folder(folder: str, recursive: bool = False) -> List[Image]:
     check_folder(folder)
     # We get all the images in the folder
     base_folder = Path(folder).resolve()
     images: List[Image] = []
-    images_paths = []
-    if recursive:
-        images_paths = find_images_recursively(str(base_folder))
-    else:
-
-        images_paths = [str((base_folder / file).resolve()) for file in os.listdir(base_folder)]
+    images_paths = search_images_in_folder(folder, recursive=recursive)
     for image_path in images_paths:
         image_info = get_image_info(image_path, "train")
         images.append(image_info)
@@ -96,26 +103,40 @@ def read_images_from_folder(folder: str, recursive: bool = False) -> List[Image]
 
 
 def load_images(
-    dataset: Dataset, path: str, paths: List[str] | None = None, recursive: bool = False
+    dataset: Dataset,
+    path: str,
+    paths: List[str] | None = None,
+    recursive: bool = False,
+    number: int | None = None,
 ) -> Dataset:
     # we are going to load the images from the folder
     print()
     paths = paths or [path]
     print("loading images from:", paths)
     print("recursive:", recursive)
-    images: List[Image] = []
+
+    image_paths = []
+    if number is not None:
+        print("number of images to load:", number)
     for folder_path in paths:
         if not os.path.exists(folder_path):
             continue
-        # If the path is a file we load it as an image
         if os.path.isfile(folder_path):
-            print("loading image", folder_path)
-            image_info = get_image_info(folder_path, "train")
-            images.append(image_info)
+            image_paths.append(folder_path)
             continue
-        found_images = read_images_from_folder(folder_path, recursive=recursive)
-        print("loaded images", len(found_images))
-        images += found_images
+        image_paths += search_images_in_folder(folder_path, recursive=recursive)
+
+    images: List[Image] = []
+
+    if number is not None:
+        image_paths = image_paths[:number]
+
+    for image_path in image_paths:
+        image_info = get_image_info(image_path, "train")
+        images.append(image_info)
+
+    print("total images loaded:", len(images))
+
     # remove duplicates ids
     already_seen = set()
     total_images = len(images)

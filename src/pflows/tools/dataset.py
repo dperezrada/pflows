@@ -143,3 +143,11 @@ def read_json_dataset(dataset: Dataset | None = None, target_path=None) -> Datas
         return Dataset(images=images, categories=categories, groups=data["groups"])
 
     return dataset
+
+
+def reset_dataset(dataset: Dataset) -> Dataset:
+    return Dataset(
+        images=[],
+        categories=[],
+        groups=[],
+    )

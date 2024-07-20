@@ -97,7 +97,10 @@ def load_classes(image_path):
 
         yaml_file = open(f"{yaml_dir}/../data.yaml", "r")
         parsed_yaml_file = yaml.load(yaml_file, Loader=yaml.FullLoader)
-        return parsed_yaml_file["names"]
+        classes = parsed_yaml_file["names"]
+        if isinstance(classes, dict):
+            classes = list(classes.values())
+        return [str(cls) for cls in classes]
     except:
         try:
             classes_file = open(f"{yaml_dir}/../classes.txt", "r")
@@ -132,7 +135,6 @@ def load_image(image_path, selected_category, legend_image, classes, colors, ini
     with open(label_path, "r") as file:
         for line in file:
             yolo_output.append([float(x) for x in line.split(" ")])
-    print(label_path)
 
     yaml_dir = image_path.split("/images/")[0]
     if yaml_dir == image_path:
@@ -197,8 +199,7 @@ def load_image(image_path, selected_category, legend_image, classes, colors, ini
     cv2.imshow("YOLOv8 Output", image)
 
 
-def main():
-    target_path = sys.argv[1]
+def main(target_path):
     # Check if the target path exists and if it's a folder
     if not os.path.exists(target_path):
         print(f"Invalid path: {target_path}")
@@ -252,7 +253,6 @@ def main():
     current_image_index = 0
     while True:
         print(f"Image {current_image_index + 1}/{len(images)}")
-        print("selected_category", selected_category)
         if processed_image is None:
             processed_image = load_image(
                 images[current_image_index],
@@ -269,10 +269,9 @@ def main():
             current_image_index = (current_image_index + 1) % len(images)
         elif key == 2:  # Right arrow
             current_image_index = (current_image_index - 1) % len(images)
-        print(current_image_index)
 
     cv2.destroyAllWindows()
 
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1])

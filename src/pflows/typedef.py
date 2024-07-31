@@ -6,6 +6,7 @@ from dataclasses import asdict, dataclass, field, replace
 
 from PIL import Image as PILImage, ImageDraw
 
+
 def generate_random_color() -> Tuple[int, int, int]:
     return (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
 
@@ -149,6 +150,7 @@ class Image:
         annotations: List[Annotation] = [
             Annotation.from_dict(ann) for ann in data.get("annotations", [])
         ]
+        del data["annotations"]
         return cls(**data, annotations=annotations)
 
 

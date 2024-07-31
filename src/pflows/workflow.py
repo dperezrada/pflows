@@ -69,9 +69,19 @@ def prepare_workflow(
         workflow_tasks.append(task)
         non_set_env_tasks_found = True
 
+    # Keep in a variable all the functions that are going to be used in the workflow
+    workflow_functions = {}
+    for index, task in enumerate(workflow_tasks):
+        if task.get("function"):
+            workflow_functions[f"task_{index}"] = task["function"]
+            task["function"] = "run_function_path"
+
     workflow_text = json.dumps(workflow_tasks)
     workflow_text = replace_variables(workflow_text, workflow_dir)
     workflow = cast(Sequence[Dict[str, Any]], json.loads(workflow_text))
+    for index, task in enumerate(workflow):
+        if task.get("function"):
+            task["function"] = workflow_functions[f"task_{index}"]
     return workflow
 
 

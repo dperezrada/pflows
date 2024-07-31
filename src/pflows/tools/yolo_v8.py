@@ -119,8 +119,10 @@ def load_categories(parsed_yaml_file) -> List[Category]:
 
 
 def load_dataset(
-    dataset: Dataset, folder_path: str, number: int | None = None, mode: str = "auto"
+    dataset: Dataset | None, folder_path: str, number: int | None = None, mode: str = "auto"
 ) -> Dataset:
+    if dataset is None:
+        dataset = Dataset(images=[], categories=[], groups=[])
     print()
     print("Loading dataset from yolo_v8 format in: ", folder_path)
     data_yaml = Path(folder_path) / "data.yaml"
@@ -466,7 +468,8 @@ def write(
         if data_yaml_path.exists():
             # remove the directory
             shutil.rmtree(target_path)
-            shutil.rmtree(raw_path)
+            if raw_path.exists():
+                shutil.rmtree(raw_path)
         else:
             raise ValueError(
                 f"Directory {target_path} already exists, but is not a yolo_v8 dataset"

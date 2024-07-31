@@ -15,7 +15,7 @@ def calculate_center_from_bbox(bbox: Tuple[float, float, float, float]) -> Tuple
     return (round((x1 + x2) / 2, ROUNDING), round((y1 + y2) / 2, ROUNDING))
 
 
-def calculate_center_from_polygon(polygon: Tuple[float, ...]) -> Tuple[float, float]:
+def calculate_center_from_polygon(polygon: Tuple[float, ...]) -> Tuple[float, float] | None:
     if len(polygon) == 0:
         return None
     x = [polygon[i] for i in range(0, len(polygon), 2)]
@@ -103,3 +103,34 @@ def iou_polygons(a: Tuple[float, ...], b: Tuple[float, ...]) -> float:
     except Exception as e:
         print(f"Error calculating IoU: {e}")
         return 0.0
+
+
+def check_polygon_containment(
+    polygon1: Tuple[float, ...], polygon2: Tuple[float, ...], threshold=1
+):
+    """
+    Check if polygon1 contains polygon2 and calculate the containment percentage.
+
+    :param polygon1: List of coordinates for polygon1 in format [x1,y1,x2,y2,x3,y3...]
+    :param polygon2: List of coordinates for polygon2 in format [x1,y1,x2,y2,x3,y3...]
+    :param threshold: Percentage threshold for considering containment (default 100%)
+    :return: Tuple (is_contained, containment_percentage)
+    """
+    # Convert coordinate lists to list of tuples
+    polygon1_points = [(polygon1[i], polygon1[i + 1]) for i in range(0, len(polygon1), 2)]
+    polygon2_points = [(polygon2[i], polygon2[i + 1]) for i in range(0, len(polygon2), 2)]
+
+    # Create Shapely Polygon objects
+    polygon1 = Polygon(polygon1_points)
+    polygon2 = Polygon(polygon2_points)
+
+    # Calculate the intersection of the two polygons
+    intersection = polygon1.intersection(polygon2)
+
+    # Calculate the containment percentage
+    containment_percentage = intersection.area / polygon2.area
+
+    # Check if the containment percentage meets the threshold
+    is_contained = containment_percentage >= threshold
+
+    return is_contained, containment_percentage

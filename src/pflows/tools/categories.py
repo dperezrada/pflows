@@ -51,23 +51,25 @@ def keep(dataset: Dataset, categories: list[str]) -> Dataset:
     print("New categories: ")
     for category in new_categories:
         print("\t", category.name)
-    return Dataset(
-        images=[
-            Image(
-                **{
-                    **asdict(image),
-                    "annotations": [
-                        annotation
-                        for annotation in image.annotations
-                        if annotation.category_name in categories
-                    ],
-                }
-            )
-            for image in dataset.images
-            if any(annotation.category_name in categories for annotation in image.annotations)
-        ],
-        categories=new_categories,
-        groups=dataset.groups,
+    return remap_category_ids(
+        Dataset(
+            images=[
+                Image(
+                    **{
+                        **asdict(image),
+                        "annotations": [
+                            annotation
+                            for annotation in image.annotations
+                            if annotation.category_name in categories
+                        ],
+                    }
+                )
+                for image in dataset.images
+                if any(annotation.category_name in categories for annotation in image.annotations)
+            ],
+            categories=new_categories,
+            groups=dataset.groups,
+        )
     )
 
 
@@ -186,25 +188,38 @@ def group_categories(
                 }
             )
         )
-    return Dataset(
-        images=new_images,
-        categories=[
-            Category(
-                id=index,
-                name=name,
-            )
-            for index, name in enumerate(categories_names)
-        ],
-        groups=dataset.groups,
+    return remap_category_ids(
+        Dataset(
+            images=new_images,
+            categories=[
+                Category(
+                    id=index,
+                    name=name,
+                )
+                for index, name in enumerate(categories_names)
+            ],
+            groups=dataset.groups,
+        )
     )
 
 
-def remap_category_ids(dataset: Dataset) -> Dataset:
+def remap_category_ids(dataset: Dataset, check_missing_categories=True) -> Dataset:
     """
     Remaps the category ids in a dataset to be contiguous integers starting from 0.
     """
 
     category_names = sorted(list(set(category.name for category in dataset.categories)))
+    if check_missing_categories:
+        category_names = sorted(
+            list(
+                set(
+                    annotation.category_name
+                    for image in dataset.images
+                    for annotation in image.annotations
+                )
+            )
+        )
+
     new_categories = [
         Category(
             id=index,
@@ -296,6 +311,67 @@ def remap_categories(dataset: Dataset, mapping: dict[str, str]) -> Dataset:
                 for image in dataset.images
             ],
             categories=new_categories,
+            groups=dataset.groups,
+        )
+    )
+
+
+def rename_some_categories(dataset: Dataset, renames: dict[str, str]) -> Dataset:
+    """
+    Renames specified categories in a dataset.
+
+    This function takes a dataset and a dictionary of renames where keys are the original category names
+    and values are the new names. It returns a new dataset with updated category names for the specified
+    categories. Categories not specified in the renames dictionary remain unchanged.
+
+    Args:
+        dataset: The input dataset to be modified.
+        renames: A dictionary mapping from old category names to new category names.
+
+    Returns:
+        A new dataset with updated category names.
+
+    Example:
+        # Define the renames
+        renames = {
+            "11": "A",
+            "12": "B",
+            "13": "C"
+        }
+
+        # Call the rename_some_categories function
+        updated_dataset = rename_some_categories(dataset, renames)
+
+        # The updated_dataset will have categories "11", "12", and "13" renamed to "A", "B", and "C"
+        # respectively, while other categories remain unchanged.
+    """
+    new_images = [
+        Image(
+            **{
+                **asdict(image),
+                "annotations": [
+                    Annotation(
+                        **{
+                            **asdict(annotation),
+                            "category_name": renames.get(
+                                annotation.category_name, annotation.category_name
+                            ),
+                        }
+                    )
+                    for annotation in image.annotations
+                ],
+            }
+        )
+        for image in dataset.images
+    ]
+    updated_categories = [
+        Category(id=category.id, name=renames.get(category.name, category.name))
+        for category in dataset.categories
+    ]
+    return remap_category_ids(
+        Dataset(
+            images=new_images,
+            categories=updated_categories,
             groups=dataset.groups,
         )
     )

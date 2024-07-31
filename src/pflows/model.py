@@ -1,4 +1,5 @@
 import os
+import json
 from hashlib import md5
 from pathlib import Path
 from typing import List
@@ -35,6 +36,22 @@ def get_image_info(
     image_path_obj = Path(image_path)
     if image_path_obj.name not in intermediate_ids:
         intermediate_ids.append(image_path_obj.name)
+    if image_path_obj.stem not in intermediate_ids and image_path_obj.suffix in [
+        "jpg",
+        "jpeg",
+        "png",
+    ]:
+        intermediate_ids.append(image_path_obj.stem)
+    # check if raw folder exists
+    image_stem = image_path_obj.stem
+    raw_info_path = Path(
+        str(image_path_obj)
+        .replace("/yolo", "/raw")
+        .replace(f"/images/{image_stem}", f"/dataset/{image_stem}")
+    )
+    raw_info_path = raw_info_path.with_suffix(".json")
+    if raw_info_path.exists():
+        return Image.from_dict(json.loads(raw_info_path.read_text()))
 
     image: Image = Image(
         id=image_hash,

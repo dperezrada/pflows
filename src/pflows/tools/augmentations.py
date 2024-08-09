@@ -258,7 +258,7 @@ def by_categories(dataset: Dataset, categories_numbers: Dict[str, int]) -> Datas
         augmented_images = generate_augmentations(category_training, number)
         new_augmented_images += augmented_images
     return Dataset(
-        images=dataset.images + augmented_images,
+        images=dataset.images + new_augmented_images,
         categories=dataset.categories,
         groups=dataset.groups,
     )

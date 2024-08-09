@@ -6,7 +6,7 @@ from typing import List
 
 import imagesize
 
-from pflows.typedef import Image
+from pflows.typedef import Annotation, Image
 
 
 def get_image_info_fast(image_path: str):
@@ -62,4 +62,14 @@ def get_image_info(
         size_kb=size_kb,
         group=group_name,
     )
+    return image
+
+
+def image_from_image_path(
+    path: str,
+    annotations: List[Annotation] | None = None,
+) -> Image:
+    image = get_image_info(path, "train")
+    image.annotations = annotations or []
+
     return image

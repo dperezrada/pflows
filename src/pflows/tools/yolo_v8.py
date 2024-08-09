@@ -110,6 +110,12 @@ def process_image_annotations(
             )
     return annotations
 
+def get_model_category_ids(model):
+    model_names_keys = (
+        model.names.keys() if isinstance(model.names, dict) else range(len(model.names))
+    )
+    return model_names_keys
+
 
 def load_categories(parsed_yaml_file) -> List[Category]:
     classes = parsed_yaml_file["names"]
@@ -391,6 +397,32 @@ def performance_non_max_suppression(boxes, scores, iou_threshold):
     return selected_indices
 
 
+def annotations_non_max_suppression(
+    annotations: List[Annotation],
+    categories,
+    iou_threshold: float = 0.4,
+    active: bool = True,
+) -> List[Annotation]:
+    keep_annotations = []
+    for category_id in categories:
+        category_annotations = [
+            annotation for annotation in annotations if annotation.category_id == category_id
+        ]
+        if not category_annotations:
+            continue
+        if active:
+            keep_annotations_indexes = performance_non_max_suppression(
+                np.array([annotation.bbox for annotation in category_annotations]),
+                np.array([annotation.conf for annotation in category_annotations]),
+                iou_threshold,
+            )
+            keep_annotations.extend(
+                [category_annotations[index] for index in keep_annotations_indexes]
+            )
+        else:
+            keep_annotations.extend(category_annotations)
+    return keep_annotations
+
 def run_model(
     dataset: Dataset,
     model_path: str,
@@ -400,9 +432,7 @@ def run_model(
     non_max_suppression: bool = True,
 ) -> Dataset:
     model = YOLO(model_path)
-    model_names_keys = (
-        model.names.keys() if isinstance(model.names, dict) else range(len(model.names))
-    )
+    model_names_keys = get_model_category_ids(model)
     model_names = [model.names[key] for key in sorted(model_names_keys)]
     current_category_names = [category.name for category in dataset.categories]
     new_categories = current_category_names + [
@@ -418,24 +448,8 @@ def run_model(
             segment_tolerance=segment_tolerance,
             add_tag=add_tag,
         )
-        keep_annotations = []
-        for category in model_names_keys:
-            category_annotations = [
-                annotation for annotation in model_annotations if annotation.category_id == category
-            ]
-            if not model_annotations:
-                continue
-            if non_max_suppression:
-                keep_annotations_indexes = performance_non_max_suppression(
-                    np.array([annotation.bbox for annotation in category_annotations]),
-                    np.array([annotation.conf for annotation in category_annotations]),
-                    0.4,
-                )
-                keep_annotations.extend(
-                    [category_annotations[index] for index in keep_annotations_indexes]
-                )
-            else:
-                keep_annotations.extend(category_annotations)
+        keep_annotations = annotations_non_max_suppression(model_annotations, model_names_keys)
+        
 
         image.annotations = image.annotations + keep_annotations
         if index % 25 == 0:

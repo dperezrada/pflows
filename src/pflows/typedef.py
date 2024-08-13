@@ -50,6 +50,7 @@ class Annotation:
     tags: List[str] = field(default_factory=list)
     original_id: Optional[str] = None
     truncated: Optional[bool] = False
+    model_id: Optional[str] = None
 
     def distance(self, other_annotation) -> float:
         """
@@ -219,3 +220,15 @@ class Task:
     params: Dict[str, Any]
     skip: bool = False
     id: str | None = None
+
+@dataclass
+class Model:
+    """Represents a model to be used."""
+    id: str
+    name: str
+    task: str
+    type: str
+    categories: List[str]
+    params: Dict[str, Any]
+    version: str
+    size_kb: int

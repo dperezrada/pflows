@@ -110,8 +110,17 @@ def process_image_annotations(
             )
     return annotations
 
+def get_categories_from_model(model):
+    categories = []
+    if isinstance(model.names, dict):
+        for key in get_model_category_ids(model):
+            categories.append(model.names[key])
+    else:
+        categories = model.names
+    return categories
+
 def get_model_category_ids(model):
-    model_names_keys = (
+    model_names_keys = sorted(
         model.names.keys() if isinstance(model.names, dict) else range(len(model.names))
     )
     return model_names_keys
@@ -236,6 +245,7 @@ def run_model_on_image(
     segment_tolerance: float = 0,
     preprocess_function: Callable[[ImagePil.Image], NDArray[np.uint8]] = preprocess_image,
     add_tag: str | None = None,
+    model_id: str | None = None,
 ) -> List[Annotation]:
     # We run the model on the image
     image = ImagePil.open(image_path)
@@ -287,6 +297,8 @@ def run_model_on_image(
                         task="segment",
                         conf=round(get_item_from_numpy_or_tensor(box.conf[0]), ROUNDING),
                         tags=[add_tag] if add_tag else [],
+                        model_id=model_id,
+
                     )
                 )
             continue
@@ -308,6 +320,7 @@ def run_model_on_image(
                         task="classification",
                         conf=round(prob, ROUNDING),
                         tags=[add_tag] if add_tag else [],
+                        model_id=model_id,
                     )
                 )
             continue
@@ -335,6 +348,7 @@ def run_model_on_image(
                         task="detect",
                         conf=confidence,
                         tags=[add_tag] if add_tag else [],
+                        model_id=model_id,
                     )
                 )
     return sorted(

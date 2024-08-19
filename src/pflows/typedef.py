@@ -32,6 +32,7 @@ def relative_to_absolute_coords(coords: Tuple[float, ...], width: int, height: i
 @dataclass
 class Category:
     """Represents a category for annotations."""
+
     id: int
     name: str
 
@@ -39,18 +40,26 @@ class Category:
 @dataclass
 class Annotation:
     """Represents an annotation in an image."""
+
     id: str
     category_id: int
-    center: Tuple[float, float] | None  # Format: (x, y) this is relative to the image size (between 0 and 1)
-    bbox: Tuple[float, float, float, float] | None  # Format: (x1, y1, x2, y2) this is relative to the image size (between 0 and 1)
-    segmentation: Tuple[float, ...] | None  # Format: (x1, y1, x2, y2, ...) this is relative to the image size (between 0 and 1)
-    task: str # "segment" or "detect"
+    center: (
+        Tuple[float, float] | None
+    )  # Format: (x, y) this is relative to the image size (between 0 and 1)
+    bbox: (
+        Tuple[float, float, float, float] | None
+    )  # Format: (x1, y1, x2, y2) this is relative to the image size (between 0 and 1)
+    segmentation: (
+        Tuple[float, ...] | None
+    )  # Format: (x1, y1, x2, y2, ...) this is relative to the image size (between 0 and 1)
     conf: float = -1.0  # Confidence score, between 0 and 1 (default: -1.0)
     category_name: str = ""
     tags: List[str] = field(default_factory=list)
     original_id: Optional[str] = None
     truncated: Optional[bool] = False
     model_id: Optional[str] = None
+    obb: Optional[Tuple[float, ...]] = None  # Format (x1, y1, x2, y2, x3, y3, x4, y4)
+    task: str = "detect"  # "segment" or "detect" or "obb"
 
     def distance(self, other_annotation) -> float:
         """
@@ -92,6 +101,7 @@ class Annotation:
 @dataclass
 class Image:
     """Represents an image with annotations."""
+
     id: str
     path: str
     intermediate_ids: List[str]
@@ -127,14 +137,22 @@ class Image:
         img = PILImage.open(self.path)
         draw = ImageDraw.Draw(img)
         width, height = img.size
+        category_colors = {}
+        # yellow for text
+        text_color = (255, 255, 0)
 
         for annotation in self.annotations:
-            color = generate_random_color()
+            if annotation.category_name not in category_colors:
+                category_colors[annotation.category_name] = generate_random_color()
 
-            if annotation.task == "segment" and annotation.segmentation:
-                abs_segmentation = relative_to_absolute_coords(annotation.segmentation, width, height)
+            color = category_colors[annotation.category_name]
+
+            if annotation.task in ["segment", "obb"] and annotation.segmentation:
+                abs_segmentation = relative_to_absolute_coords(
+                    annotation.segmentation, width, height
+                )
                 points = list(zip(abs_segmentation[0::2], abs_segmentation[1::2]))
-                draw.polygon(points, outline=color)
+                draw.polygon(points, outline=color, width=3)
 
             if annotation.task == "detect" and annotation.bbox:
                 x1, y1, x2, y2 = annotation.bbox
@@ -149,19 +167,27 @@ class Image:
                 abs_cx = int(cx * width)
                 abs_cy = int(cy * height)
                 radius = 3
-                draw.ellipse([abs_cx - radius, abs_cy - radius, abs_cx + radius, abs_cy + radius], fill=color)
+                draw.ellipse(
+                    [abs_cx - radius, abs_cy - radius, abs_cx + radius, abs_cy + radius], fill=color
+                )
 
             if annotation.category_name:
                 if annotation.bbox:
-                    label_position = (int(annotation.bbox[0] * width), int(annotation.bbox[1] * height) - 15)
+                    label_position = (
+                        int(annotation.bbox[0] * width),
+                        int(annotation.bbox[1] * height) - 15,
+                    )
                 elif annotation.center:
-                    label_position = (int(annotation.center[0] * width), int(annotation.center[1] * height))
+                    label_position = (
+                        int(annotation.center[0] * width),
+                        int(annotation.center[1] * height),
+                    )
                 else:
                     continue
                 text = annotation.category_name
                 if annotation.conf >= 0:
                     text = f"{annotation.category_name} ({annotation.conf:.2f})"
-                draw.text(label_position, text, fill=color)
+                draw.text(label_position, text, fill=text_color)
 
         return img
 
@@ -182,7 +208,9 @@ class Image:
         """
         if isinstance(data, cls):
             return data
-        annotations: List[Annotation] = [Annotation.from_dict(ann) for ann in data.get("annotations", [])]
+        annotations: List[Annotation] = [
+            Annotation.from_dict(ann) for ann in data.get("annotations", [])
+        ]
         del data["annotations"]
         return cls(**data, annotations=annotations)
 
@@ -190,6 +218,7 @@ class Image:
 @dataclass
 class Dataset:
     """Represents a dataset containing images, categories, and groups."""
+
     images: List[Image]
     categories: List[Category]
     groups: List[str]
@@ -207,7 +236,11 @@ class Dataset:
         """
         raw_images = data.images if hasattr(data, "images") else data.get("images", [])
         images = [Image.from_dict(img) for img in raw_images]
-        categories = data.categories if hasattr(data, "categories") else [Category(**cat) for cat in data.get("categories", [])]
+        categories = (
+            data.categories
+            if hasattr(data, "categories")
+            else [Category(**cat) for cat in data.get("categories", [])]
+        )
         groups = data.groups if hasattr(data, "groups") else data.get("groups", [])
         return cls(images=images, categories=categories, groups=groups)
 
@@ -215,15 +248,18 @@ class Dataset:
 @dataclass
 class Task:
     """Represents a task to be performed."""
+
     task: str
     function: Callable[..., Any]
     params: Dict[str, Any]
     skip: bool = False
     id: str | None = None
 
+
 @dataclass
 class Model:
     """Represents a model to be used."""
+
     id: str
     name: str
     task: str

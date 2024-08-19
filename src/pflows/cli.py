@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from pflows.workflow import run_workflow
 from compare_models import compare_models, show_model_details
 from pflows.viewer.review_images import main as review_main
+from train_remote import main as train_main
 
 
 load_dotenv(".env")
@@ -43,6 +44,10 @@ def modal_server_command() -> None:
     subprocess.run(["modal", "serve", "./src/modal_server.py"], cwd=main_folder)
 
 
+def train_remote_command(config: str) -> None:
+    train_main(config)
+
+
 def review_command(filepath: str) -> None:
     review_main(filepath)
 
@@ -61,6 +66,10 @@ def main():
 
     # Parser for the 'modal_server' command
     subparsers.add_parser("modal_server", help="Run modal server")
+
+    # Train server
+    train_parser = subparsers.add_parser("train_remote", help="Run a train process")
+    train_parser.add_argument("config", type=str, help="Path to the config file")
 
     # Parser for the 'review' command
     review_parser = subparsers.add_parser("review", help="Run review script")
@@ -103,6 +112,8 @@ def main():
         run_command(args.workflow_path, args.output_json, args.env)
     elif args.command == "modal_server":
         modal_server_command()
+    elif args.command == "train_remote":
+        train_remote_command(args.config)
     elif args.command == "review":
         review_command(args.filepath)
     elif args.command == "compare":

@@ -1,5 +1,6 @@
 from typing import List, Sequence, Tuple
 from dataclasses import asdict
+from scipy.spatial import ConvexHull
 
 import cv2
 import numpy as np
@@ -315,6 +316,7 @@ def remove_duplicate_annotations(dataset: Dataset, iou_threshold: float = 0.5) -
 
     return Dataset(images=new_images, categories=dataset.categories, groups=dataset.groups)
 
+
 def calculate_bbox_iou(bbox1, bbox2):
     x1 = max(bbox1[0], bbox2[0])
     y1 = max(bbox1[1], bbox2[1])
@@ -327,6 +329,7 @@ def calculate_bbox_iou(bbox1, bbox2):
 
     iou = intersection / (area1 + area2 - intersection)
     return iou
+
 
 def replace_category_on_overlap(
     dataset: Dataset,
@@ -430,3 +433,85 @@ def change_annotation_from_another_annotation(
                 annotation.category_name = closest.category_name
 
     return dataset
+
+
+def polygon_to_obb(polygon):
+    if polygon is None:
+        return None
+    if len(polygon) < 3:
+        return None
+    # Ensure polygon is a numpy array
+    polygon = np.array(polygon).reshape(-1, 2)
+
+    # Get the convex hull of the polygon
+    hull = ConvexHull(polygon)
+    hull_points = polygon[hull.vertices]
+
+    # Function to calculate the area of a rectangle
+    def rect_area(rect):
+        return np.linalg.norm(rect[1] - rect[0]) * np.linalg.norm(rect[2] - rect[1])
+
+    # Initialize variables
+    min_rect = None
+    min_area = float("inf")
+
+    # Iterate through all edges of the convex hull
+    for i in range(len(hull_points)):
+        edge = hull_points[(i + 1) % len(hull_points)] - hull_points[i]
+        edge_norm = edge / np.linalg.norm(edge)
+
+        # Create orthogonal vector
+        orth = np.array([-edge_norm[1], edge_norm[0]])
+
+        # Project all points onto the edge and its orthogonal
+        proj_edge = np.dot(hull_points - hull_points[i], edge_norm)
+        proj_orth = np.dot(hull_points - hull_points[i], orth)
+
+        # Find min and max projections
+        min_edge, max_edge = np.min(proj_edge), np.max(proj_edge)
+        min_orth, max_orth = np.min(proj_orth), np.max(proj_orth)
+
+        # Calculate rectangle vertices
+        rect = np.array(
+            [
+                hull_points[i] + min_edge * edge_norm + min_orth * orth,
+                hull_points[i] + max_edge * edge_norm + min_orth * orth,
+                hull_points[i] + max_edge * edge_norm + max_orth * orth,
+                hull_points[i] + min_edge * edge_norm + max_orth * orth,
+            ]
+        )
+
+        # Update minimum area rectangle if necessary
+        area = rect_area(rect)
+        if area < min_area:
+            min_area = area
+            min_rect = rect
+
+    # Flatten the rectangle coordinates
+    return min_rect.flatten().tolist()
+
+
+def image_to_obb(image: Image) -> Image:
+    return Image(
+        **{
+            **asdict(image),
+            "annotations": [
+                Annotation(
+                    **{
+                        **asdict(ann),
+                        "bbox": polygon_to_obb(ann.segmentation),
+                        "task": "obb",
+                    }
+                )
+                for ann in image.annotations
+            ],
+        }
+    )
+
+
+def dataset_to_obb(dataset: Dataset) -> Dataset:
+    return Dataset(
+        images=[image_to_obb(image) for image in dataset.images],
+        categories=dataset.categories,
+        groups=dataset.groups,
+    )

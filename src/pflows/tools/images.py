@@ -261,7 +261,7 @@ def slice_one_image(
     except:
         task_type = "detect"
     # Only detect or segment is supported for now
-    if not task_type in ["detect", "segment"]:
+    if not task_type in ["detect", "segment", "obb"]:
         return [image]
 
     sliced_images = []
@@ -318,7 +318,7 @@ def slice_one_image(
                     }
                 },
             )
-            if task_type == "segment":
+            if task_type in ["segment", "obb"]:
                 annotations = get_segmentation_annotations_from_sliced_image(
                     sliced_image, image, left, top
                 )

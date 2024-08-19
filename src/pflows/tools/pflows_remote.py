@@ -67,7 +67,9 @@ def download_job_file(
     if response.status_code == 200:
         content_type = response.headers.get("Content-Type") or ""
 
-        os.makedirs(os.path.dirname(local_path), exist_ok=True)
+        target_dir = os.path.dirname(local_path)
+        if target_dir != "":
+            os.makedirs(target_dir, exist_ok=True)
         if content_type == "application/json":
             data = response.json()
             with open(local_path, "w", encoding="utf-8") as f:

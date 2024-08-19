@@ -77,6 +77,7 @@ def process_image_annotations(
             md5_hash = md5(data.encode()).hexdigest()
             bbox = None
             polygon = None
+            obb = None
             candidate_task = None
             if len(polygon_row) == 4:
                 bbox_row_tuple = (
@@ -89,7 +90,20 @@ def process_image_annotations(
                 polygon = polygon_from_bbox(bbox)
                 task = "detect"
             else:
-                task = "segment"
+                if len(polygon_row) == 8:
+                    task = "obb"
+                    obb = (
+                        polygon_row[0],
+                        polygon_row[1],
+                        polygon_row[2],
+                        polygon_row[3],
+                        polygon_row[4],
+                        polygon_row[5],
+                        polygon_row[6],
+                        polygon_row[7],
+                    )
+                else:
+                    task = "segment"
                 polygon = tuple(polygon_row)
                 bbox = bbox_from_polygon(polygon)
             if mode == "bbox":
@@ -106,9 +120,11 @@ def process_image_annotations(
                     bbox=bbox,
                     segmentation=polygon,
                     task=task,
+                    obb=obb,
                 )
             )
     return annotations
+
 
 def get_categories_from_model(model):
     categories = []
@@ -118,6 +134,7 @@ def get_categories_from_model(model):
     else:
         categories = model.names
     return categories
+
 
 def get_model_category_ids(model):
     model_names_keys = sorted(
@@ -260,6 +277,11 @@ def run_model_on_image(
         yolo_categories = [str(yolo_categories[key]) for key in sorted(yolo_categories.keys())]
     if model_categories is None:
         model_categories = yolo_categories
+    task = model.task
+    print(task)
+    if not task in ["detect", "segment", "obb"]:
+        raise ValueError(f"Task {task} is not supported")
+    task = str(task)
     for result in results:
         # Segmentation case
         if result.masks is not None and result.boxes is not None:
@@ -294,11 +316,10 @@ def run_model_on_image(
                         center=calculate_center_from_polygon(simplified_points),
                         bbox=bbox_from_polygon(simplified_points),
                         segmentation=simplified_points,
-                        task="segment",
+                        task=task,
                         conf=round(get_item_from_numpy_or_tensor(box.conf[0]), ROUNDING),
                         tags=[add_tag] if add_tag else [],
                         model_id=model_id,
-
                     )
                 )
             continue
@@ -346,6 +367,54 @@ def run_model_on_image(
                         bbox=bbox,
                         segmentation=polygon_from_bbox(bbox),
                         task="detect",
+                        conf=confidence,
+                        tags=[add_tag] if add_tag else [],
+                        model_id=model_id,
+                    )
+                )
+        if result.obb is not None:
+            for obb in result.obb:
+                category_id = int(get_item_from_numpy_or_tensor(obb.cls))
+                category_name = model_categories[category_id]
+                confidence = round(get_item_from_numpy_or_tensor(obb.conf), ROUNDING)
+
+                # Extract the OBB normalized coordinates
+                obb_coords = obb.xyxyxyxyn.tolist()[0]  # Normalized coordinates
+
+                # Calculate the center of the OBB (normalized)
+                center_x = sum(x for x, _ in obb_coords) / 4
+                center_y = sum(y for _, y in obb_coords) / 4
+                center = (round(center_x, ROUNDING), round(center_y, ROUNDING))
+
+                # Calculate an approximate bounding box (normalized)
+                x_coords, y_coords = zip(*obb_coords)
+                bbox = (
+                    round(min(x_coords), ROUNDING),
+                    round(min(y_coords), ROUNDING),
+                    round(max(x_coords), ROUNDING),
+                    round(max(y_coords), ROUNDING),
+                )
+
+                # Round the segmentation coordinates
+                segmentation_pairs = [
+                    (round(x, ROUNDING), round(y, ROUNDING)) for x, y in obb_coords
+                ]
+                segmentation_flat = [item for sublist in segmentation_pairs for item in sublist]
+
+                hash_id = md5(
+                    f"{image_path}_{category_id}_{confidence}_{','.join(map(str, segmentation_flat))}".encode()
+                ).hexdigest()
+
+                annotations.append(
+                    Annotation(
+                        id=hash_id,
+                        category_id=category_id,
+                        category_name=category_name,
+                        center=center,
+                        bbox=bbox,
+                        segmentation=segmentation_flat,
+                        obb=segmentation_flat,
+                        task="obb",
                         conf=confidence,
                         tags=[add_tag] if add_tag else [],
                         model_id=model_id,
@@ -413,11 +482,13 @@ def performance_non_max_suppression(boxes, scores, iou_threshold):
 
 def annotations_non_max_suppression(
     annotations: List[Annotation],
-    categories,
+    categories=None,
     iou_threshold: float = 0.4,
     active: bool = True,
 ) -> List[Annotation]:
     keep_annotations = []
+    if categories is None:
+        categories = [annotation.category_id for annotation in annotations]
     for category_id in categories:
         category_annotations = [
             annotation for annotation in annotations if annotation.category_id == category_id
@@ -437,6 +508,7 @@ def annotations_non_max_suppression(
             keep_annotations.extend(category_annotations)
     return keep_annotations
 
+
 def run_model(
     dataset: Dataset,
     model_path: str,
@@ -444,6 +516,7 @@ def run_model(
     threshold: float = 0.5,
     segment_tolerance: float = 0.02,
     non_max_suppression: bool = True,
+    non_max_suppression_threshold: float = 0.4,
 ) -> Dataset:
     model = YOLO(model_path)
     model_names_keys = get_model_category_ids(model)
@@ -462,8 +535,12 @@ def run_model(
             segment_tolerance=segment_tolerance,
             add_tag=add_tag,
         )
-        keep_annotations = annotations_non_max_suppression(model_annotations, model_names_keys)
-        
+        keep_annotations = annotations_non_max_suppression(
+            model_annotations,
+            model_names_keys,
+            iou_threshold=non_max_suppression_threshold,
+            active=non_max_suppression,
+        )
 
         image.annotations = image.annotations + keep_annotations
         if index % 25 == 0:
@@ -564,7 +641,13 @@ def write(
                 if annotation.task == "detect" and annotation.bbox:
                     yolo_bbox = yolov8_from_bbox(annotation.bbox)
                     f.write(f"{annotation.category_id} {' '.join(str(x) for x in yolo_bbox)}\n")
-                elif annotation.task == "segment" and annotation.segmentation:
+                elif annotation.task in "segment" and annotation.segmentation:
+                    polygon_str = " ".join(str(x) for x in annotation.segmentation)
+                    f.write(f"{annotation.category_id} {polygon_str}\n")
+                elif annotation.task == "obb" and annotation.obb:
+                    obb_str = " ".join(str(x) for x in annotation.obb)
+                    f.write(f"{annotation.category_id} {obb_str}\n")
+                elif annotation.task == "obb" and annotation.segmentation:
                     polygon_str = " ".join(str(x) for x in annotation.segmentation)
                     f.write(f"{annotation.category_id} {polygon_str}\n")
     print()

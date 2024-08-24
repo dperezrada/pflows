@@ -1,6 +1,6 @@
 from hashlib import md5
 from dataclasses import asdict
-from typing import Sequence
+from typing import Any, Sequence
 
 from pflows.polygons import (
     bbox_from_polygon,
@@ -203,10 +203,19 @@ def group_categories(
     )
 
 
-def remap_category_ids(dataset: Dataset, check_missing_categories=True) -> Dataset:
+def remap_category_ids(
+    dataset: Dataset, check_missing_categories=True, dataclasses: dict[str, Any] | None = None
+) -> Dataset:
     """
     Remaps the category ids in a dataset to be contiguous integers starting from 0.
     """
+    if dataclasses is None:
+        dataclasses = {}
+
+    Image_class = dataclasses.get("Image", Image)
+    Annotation_class = dataclasses.get("Annotation", Annotation)
+    Category_class = dataclasses.get("Category", Category)
+    Dataset_class = dataclasses.get("Dataset", Dataset)
 
     category_names = sorted(list(set(category.name for category in dataset.categories)))
     if check_missing_categories:
@@ -221,7 +230,7 @@ def remap_category_ids(dataset: Dataset, check_missing_categories=True) -> Datas
         )
 
     new_categories = [
-        Category(
+        Category_class(
             id=index,
             name=name,
         )
@@ -231,11 +240,11 @@ def remap_category_ids(dataset: Dataset, check_missing_categories=True) -> Datas
     # Remap the category ids
     category_map = {category.name: category.id for category in new_categories}
     new_images = [
-        Image(
+        Image_class(
             **{
                 **asdict(image),
                 "annotations": [
-                    Annotation(
+                    Annotation_class(
                         **{
                             **asdict(annotation),
                             "category_id": category_map[annotation.category_name],
@@ -247,7 +256,7 @@ def remap_category_ids(dataset: Dataset, check_missing_categories=True) -> Datas
         )
         for image in dataset.images
     ]
-    return Dataset(
+    return Dataset_class(
         images=new_images,
         categories=new_categories,
         groups=dataset.groups,

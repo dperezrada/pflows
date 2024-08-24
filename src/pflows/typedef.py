@@ -85,7 +85,7 @@ class Annotation:
     @classmethod
     def from_dict(cls, data):
         """
-        Create an Annotation instance from a dictionary.
+        Create an Annotation instance from a dictionary, discarding any fields not in the schema.
 
         Args:
             data (dict): Dictionary containing annotation data.
@@ -95,7 +95,14 @@ class Annotation:
         """
         if isinstance(data, cls):
             return data
-        return cls(**data)
+
+        # Get the field names defined in the Annotation class
+        valid_fields = cls.__annotations__.keys()
+
+        # Filter the input data to only include valid fields
+        filtered_data = {k: v for k, v in data.items() if k in valid_fields}
+
+        return cls(**filtered_data)
 
 
 @dataclass
@@ -198,7 +205,7 @@ class Image:
     @classmethod
     def from_dict(cls, data):
         """
-        Create an Image instance from a dictionary.
+        Create an Image instance from a dictionary, discarding any fields not in the schema.
 
         Args:
             data (dict): Dictionary containing image data.
@@ -208,11 +215,14 @@ class Image:
         """
         if isinstance(data, cls):
             return data
-        annotations: List[Annotation] = [
-            Annotation.from_dict(ann) for ann in data.get("annotations", [])
-        ]
-        del data["annotations"]
-        return cls(**data, annotations=annotations)
+
+        valid_fields = cls.__annotations__.keys()
+        filtered_data = {k: v for k, v in data.items() if k in valid_fields}
+
+        annotations = [Annotation.from_dict(ann) for ann in filtered_data.get("annotations", [])]
+        filtered_data["annotations"] = annotations
+
+        return cls(**filtered_data)
 
 
 @dataclass
@@ -226,7 +236,7 @@ class Dataset:
     @classmethod
     def from_dict(cls, data):
         """
-        Create a Dataset instance from a dictionary.
+        Create a Dataset instance from a dictionary, discarding any fields not in the schema.
 
         Args:
             data (dict): Dictionary containing dataset data.
@@ -234,14 +244,16 @@ class Dataset:
         Returns:
             Dataset: An instance of Dataset.
         """
-        raw_images = data.images if hasattr(data, "images") else data.get("images", [])
-        images = [Image.from_dict(img) for img in raw_images]
-        categories = (
-            data.categories
-            if hasattr(data, "categories")
-            else [Category(**cat) for cat in data.get("categories", [])]
-        )
-        groups = data.groups if hasattr(data, "groups") else data.get("groups", [])
+        if isinstance(data, cls):
+            return data
+
+        valid_fields = cls.__annotations__.keys()
+        filtered_data = {k: v for k, v in data.items() if k in valid_fields}
+
+        images = [Image.from_dict(img) for img in filtered_data.get("images", [])]
+        categories = [Category(**cat) for cat in filtered_data.get("categories", [])]
+        groups = filtered_data.get("groups", [])
+
         return cls(images=images, categories=categories, groups=groups)
 
 

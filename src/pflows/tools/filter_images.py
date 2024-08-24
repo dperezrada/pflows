@@ -106,6 +106,14 @@ def by_group(dataset: Dataset, group: str) -> Dataset:
     )
 
 
+def by_groups(dataset: Dataset, groups: List[str]) -> Dataset:
+    return Dataset(
+        images=[image for image in dataset.images if image.group in groups],
+        categories=dataset.categories,
+        groups=dataset.groups,
+    )
+
+
 def by_category_name(
     dataset: Dataset, include: List[str] | None = None, exclude: List[str] | None = None
 ) -> Dataset:

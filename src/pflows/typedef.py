@@ -85,19 +85,22 @@ class Annotation:
     @classmethod
     def from_dict(cls, data):
         """
-        Create an Annotation instance from a dictionary, discarding any fields not in the schema.
+        Create an Annotation instance from a dictionary, including fields from parent classes.
 
         Args:
             data (dict): Dictionary containing annotation data.
 
         Returns:
-            Annotation: An instance of Annotation.
+            Annotation: An instance of Annotation or its subclass.
         """
         if isinstance(data, cls):
             return data
 
-        # Get the field names defined in the Annotation class
-        valid_fields = cls.__annotations__.keys()
+        # Get all fields from the current class and its parent classes
+        valid_fields = set()
+        for c in cls.__mro__:
+            if hasattr(c, '__annotations__'):
+                valid_fields.update(c.__annotations__.keys())
 
         # Filter the input data to only include valid fields
         filtered_data = {k: v for k, v in data.items() if k in valid_fields}
@@ -205,18 +208,22 @@ class Image:
     @classmethod
     def from_dict(cls, data):
         """
-        Create an Image instance from a dictionary, discarding any fields not in the schema.
+        Create an Image instance from a dictionary, including fields from parent classes.
 
         Args:
             data (dict): Dictionary containing image data.
 
         Returns:
-            Image: An instance of Image.
+            Image: An instance of Image or its subclass.
         """
         if isinstance(data, cls):
             return data
 
-        valid_fields = cls.__annotations__.keys()
+        valid_fields = set()
+        for c in cls.__mro__:
+            if hasattr(c, '__annotations__'):
+                valid_fields.update(c.__annotations__.keys())
+
         filtered_data = {k: v for k, v in data.items() if k in valid_fields}
 
         annotations = [Annotation.from_dict(ann) for ann in filtered_data.get("annotations", [])]
@@ -247,7 +254,11 @@ class Dataset:
         if isinstance(data, cls):
             return data
 
-        valid_fields = cls.__annotations__.keys()
+        valid_fields = set()
+        for c in cls.__mro__:
+            if hasattr(c, '__annotations__'):
+                valid_fields.update(c.__annotations__.keys())
+
         filtered_data = {k: v for k, v in data.items() if k in valid_fields}
 
         images = [Image.from_dict(img) for img in filtered_data.get("images", [])]

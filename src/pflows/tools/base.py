@@ -205,3 +205,11 @@ def decompress_zip(zip_path: str, output: str) -> Dict[str, str]:
     with zipfile.ZipFile(zip_path, "r") as zip_ref:
         zip_ref.extractall(output)
     return {"status": "uncompressed", "zip_path": zip_path, "output": output}
+
+
+def print_sample(dataset: Dataset) -> None:
+    print("Dataset Info:")
+    print("Total images:", len(dataset.images))
+    print("Total categories:", len(dataset.categories))
+    print("Total groups:", len(dataset.groups))
+    print("sample", dataset.images[0])

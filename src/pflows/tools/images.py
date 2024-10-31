@@ -24,7 +24,7 @@ from pflows.typedef import Annotation, Dataset, Image
 
 # TODO: refactor this function
 # pylint: disable=too-many-locals
-def crop_to_annotations(dataset: Dataset) -> Dataset:
+def crop_to_annotations(dataset: Dataset, tag = None) -> Dataset:
     """
     Crop images to match the min and max x/y of the annotations.
     """
@@ -39,7 +39,7 @@ def crop_to_annotations(dataset: Dataset) -> Dataset:
         max_y = 0
 
         for annotation in image.annotations:
-            if annotation.bbox is None:
+            if annotation.bbox is None or (tag is not None and tag not in annotation.tags):
                 continue
             min_x = min(int(min(annotation.bbox[0::2]) * width), min_x)
             min_y = min(int(min(annotation.bbox[1::2]) * height), min_y)
@@ -50,7 +50,7 @@ def crop_to_annotations(dataset: Dataset) -> Dataset:
         # crop the image
         # Adjust annotations for the cropped image
         for annotation in image.annotations:
-            if annotation.bbox is not None:
+            if annotation.bbox is not None and (tag is None or tag in annotation.tags):
                 (bbox_x1, bbox_y1, bbox_x2, bbox_y2) = tuple(
                     (
                         (width * coord - min_x) / new_width
@@ -593,3 +593,7 @@ def write_image_with_annotations(image: Image, target_image_path: str | None = N
     if target_image_path:
         img.save(target_image_path)
     return img
+
+
+def remove_all_annotations(dataset: Dataset) -> Dataset:
+    return Dataset(images=[Image(**asdict(image), annotations=[]) for image in dataset.images], categories=dataset.categories, groups=dataset.groups)

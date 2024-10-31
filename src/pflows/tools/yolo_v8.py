@@ -4,7 +4,9 @@ from datetime import datetime, date
 from pathlib import Path
 from hashlib import md5
 import shutil
+import tempfile
 from typing import List, Tuple, Callable, Any, Dict
+import zipfile
 
 import torch
 import yaml
@@ -185,6 +187,8 @@ def load_dataset(
                 if not os.path.exists(image_target_path):
                     raise ValueError(f"Image {image_target_path} does not exist")
                 image_info = get_image_info(str(image_target_path), group_name)
+                if not os.path.exists(image_info.path):
+                    image_info.path = str(image_target_path)
                 image_info.annotations = process_image_annotations(
                     str(Path(group_folder) / "labels" / (image_target_path.stem + ".txt")),
                     categories,
@@ -728,3 +732,21 @@ def train(
         "results": json.loads(json.dumps(results_dict, cls=CustomEncoder)),
         "model_output": model_output,
     }
+
+def find_data_yaml_folder(temp_dir: str) -> str | None:
+    for root, _, files in os.walk(temp_dir):
+        for file in files:
+            if file.endswith("data.yaml"):
+                return root
+    return None
+
+def load_from_zip(zip_path: str, temp_dir: str | None = None) -> Dataset:
+    if temp_dir is None:
+        temp_dir = tempfile.mkdtemp()
+    with zipfile.ZipFile(zip_path, "r") as zip_ref:
+        zip_ref.extractall(temp_dir)
+    # find data.yaml in the zip inside the temp_dir, recursively
+    data_yaml_folder_path = find_data_yaml_folder(temp_dir)
+    if not data_yaml_folder_path:
+        raise ValueError("data.yaml not found in the zip file")
+    return load_dataset(None, data_yaml_folder_path)

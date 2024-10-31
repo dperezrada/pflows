@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pflows"
-version = "0.1.15"
+version = "0.1.16"
 description = "Several tools for dealing with image annotations to train YOLO or similar models"
 readme = "README.md"
 authors = [

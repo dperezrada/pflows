@@ -145,24 +145,21 @@ class Image:
             PILImage.Image: The image with drawn annotations.
         """
         img = PILImage.open(self.path)
+        # Convert to RGB mode to ensure color compatibility
+        img = img.convert('RGB')
         draw = ImageDraw.Draw(img)
         width, height = img.size
         category_colors = {}
-        # yellow for text
-        text_color = (255, 255, 0)
+        # Change yellow text color to string format
+        text_color = '#FFFF00'  # yellow for text
 
         for annotation in self.annotations:
             if annotation.category_name not in category_colors:
-                category_colors[annotation.category_name] = generate_random_color()
+                rgb_color = generate_random_color()
+                # Convert RGB tuple to hex string format
+                category_colors[annotation.category_name] = '#{:02x}{:02x}{:02x}'.format(*rgb_color)
 
             color = category_colors[annotation.category_name]
-
-            if annotation.task in ["segment", "obb"] and annotation.segmentation:
-                abs_segmentation = relative_to_absolute_coords(
-                    annotation.segmentation, width, height
-                )
-                points = list(zip(abs_segmentation[0::2], abs_segmentation[1::2]))
-                draw.polygon(points, outline=color, width=3)
 
             if annotation.task == "detect" and annotation.bbox:
                 x1, y1, x2, y2 = annotation.bbox
@@ -170,7 +167,15 @@ class Image:
                 abs_y1 = int(y1 * height)
                 abs_x2 = int(x2 * width)
                 abs_y2 = int(y2 * height)
-                draw.rectangle([abs_x1, abs_y1, abs_x2, abs_y2], outline=color, width=2)
+                if all(x >= 0 for x in [abs_x1, abs_y1, abs_x2, abs_y2]):
+                    draw.rectangle([abs_x1, abs_y1, abs_x2, abs_y2], outline=color, width=2)
+
+            if annotation.task in ["segment", "obb"] and annotation.segmentation:
+                abs_segmentation = relative_to_absolute_coords(
+                    annotation.segmentation, width, height
+                )
+                points = list(zip(abs_segmentation[0::2], abs_segmentation[1::2]))
+                draw.polygon(points, outline=color, width=3)
 
             if annotation.center:
                 cx, cy = annotation.center

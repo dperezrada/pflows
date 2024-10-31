@@ -1,7 +1,7 @@
 from typing import Tuple, Sequence
 
 import numpy as np
-from shapely.geometry import Polygon, MultiPolygon
+from shapely.geometry import Point, Polygon, MultiPolygon
 from shapely.validation import make_valid
 from shapely.errors import TopologicalError
 
@@ -134,3 +134,25 @@ def check_polygon_containment(
     is_contained = containment_percentage >= threshold
 
     return is_contained, containment_percentage
+
+def check_point_in_polygon(point: Tuple[float, float], polygon: Tuple[float, ...]) -> bool:
+    """
+    Check if a point lies inside a polygon.
+
+    Args:
+        point: Tuple of (x, y) coordinates
+        polygon: Tuple of polygon coordinates in format (x1,y1,x2,y2,...)
+
+    Returns:
+        bool: True if point is inside polygon, False otherwise
+    """
+    # Convert polygon coordinates to list of tuples
+    polygon_points = [(polygon[i], polygon[i + 1]) for i in range(0, len(polygon), 2)]
+    
+    # Create Shapely Point and Polygon objects
+    point_obj = Point(point)
+    polygon_obj = Polygon(polygon_points)
+    
+    # Check if point is inside or on the boundary of the polygon
+    return polygon_obj.contains(point_obj) or polygon_obj.boundary.contains(point_obj)
+    

@@ -108,11 +108,15 @@ def main():
     )
 
     # Parser for the 'run_model' command
-    run_model_parser = subparsers.add_parser("run_model", help="Run YOLO model and compare with gold standard")
+    run_model_parser = subparsers.add_parser(
+        "run_model", help="Run YOLO model and compare with gold standard"
+    )
     run_model_parser.add_argument("model_path", help="Path to YOLO model (.pt file)")
     run_model_parser.add_argument("dataset_path", help="Path to YOLO dataset folder")
     run_model_parser.add_argument("--groups", nargs="+", help="Groups to evaluate (e.g. train val)")
-    run_model_parser.add_argument("--threshold", type=float, default=0.5, help="Confidence threshold")
+    run_model_parser.add_argument(
+        "--threshold", type=float, default=0.5, help="Confidence threshold"
+    )
     run_model_parser.add_argument("--iou-threshold", type=float, default=0.5, help="IoU threshold")
     run_model_parser.add_argument("--output", help="Path to save metrics JSON file")
 
@@ -141,7 +145,7 @@ def main():
             args.iou_threshold,
             args.output,
         )
-        
+
         # Print summary metrics
         print("\nOverall Metrics:")
         print(f"Precision: {metrics['overall']['precision']:.4f}")

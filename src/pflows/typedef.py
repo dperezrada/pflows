@@ -4,7 +4,7 @@ import random
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from dataclasses import asdict, dataclass, field, replace
 
-from PIL import Image as PILImage, ImageDraw
+from PIL import Image as PILImage, ImageDraw, ImageFont
 
 
 def generate_random_color() -> Tuple[int, int, int]:
@@ -137,7 +137,7 @@ class Image:
         new_image.info = self.info.copy()
         return new_image
 
-    def draw(self) -> PILImage.Image:
+    def draw(self, show_conf: bool = False) -> PILImage.Image:
         """
         Draw annotations on the image with:
         - Segmentation: semi-transparent fill
@@ -148,7 +148,11 @@ class Image:
         overlay = PILImage.new("RGBA", img.size, (0, 0, 0, 0))
         draw = ImageDraw.Draw(overlay)
         width, height = img.size
+        # Make font size proportional to the smaller image dimension (1.5% of smaller dimension)
+        font_size = int(min(width, height) * 0.015)
+        font = ImageFont.load_default(size=font_size)
 
+        # First pass: Draw all annotations (segmentations and bounding boxes)
         for annotation in self.annotations:
             # Generate color similar to web version
             hue = (annotation.category_id * 137.508) % 360
@@ -218,28 +222,57 @@ class Image:
                         fill=stroke_color,
                     )
 
-            # Draw text with background
+        # Create a dictionary to store used text positions
+        used_positions = {}  # Format: {x_position: [y_positions]}
+
+        # Second pass: Draw all text labels
+        for annotation in self.annotations:
             if annotation.category_name:
+                # Generate color similar to web version
+                hue = (annotation.category_id * 137.508) % 360
+                h = hue / 360
+                rgb_color = self._hsl_to_rgb(h, 0.7, 0.5)
+
                 if annotation.bbox:
                     text_x = int(annotation.bbox[0] * width)
-                    text_y = int(annotation.bbox[1] * height) - 15
+                    text_y = int(annotation.bbox[1] * height) - font_size - 5
                 elif annotation.segmentation:
-                    # Calculate text position for segmentation
                     x_coords = annotation.segmentation[0::2]
                     y_coords = annotation.segmentation[1::2]
                     text_x = int(min(x_coords) * width)
-                    text_y = int(min(y_coords) * height) - 15
+                    text_y = int(min(y_coords) * height) - font_size - 5
                 else:
                     continue
 
                 text = annotation.category_name
-                if annotation.conf >= 0:
+                if annotation.conf >= 0 and show_conf:
                     text += f" ({int(annotation.conf * 100)}%)"
 
-                # Draw text background
-                text_bbox = draw.textbbox((text_x, text_y), text)
-                draw.rectangle(text_bbox, fill=(0, 0, 0, 178))  # 70% opacity black
-                draw.text((text_x, text_y), text, fill=(255, 255, 255, 255))
+                # Get text dimensions
+                text_bbox = draw.textbbox((text_x, text_y), text, font=font)
+                text_width = text_bbox[2] - text_bbox[0]
+                text_height = text_bbox[3] - text_bbox[1]
+
+                # Check for overlaps in the region of the text
+                x_range = range(max(0, text_x - text_width), min(width, text_x + text_width))
+
+                # Find all y positions used in this x range
+                used_y_positions = set()
+                for x in x_range:
+                    if x in used_positions:
+                        used_y_positions.update(used_positions[x])
+
+                # Find the first available y position that doesn't overlap
+                while any(abs(text_y - used_y) < text_height + 5 for used_y in used_y_positions):
+                    text_y += text_height + 5
+
+                # Record the used position
+                for x in x_range:
+                    if x not in used_positions:
+                        used_positions[x] = []
+                    used_positions[x].append(text_y)
+
+                draw.text((text_x, text_y), text, font=font, fill=(255, 255, 255, 255))
 
         # Composite the transparent overlay onto the original image
         img = PILImage.alpha_composite(img.convert("RGBA"), overlay)

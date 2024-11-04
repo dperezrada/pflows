@@ -99,7 +99,7 @@ class Annotation:
         # Get all fields from the current class and its parent classes
         valid_fields = set()
         for c in cls.__mro__:
-            if hasattr(c, '__annotations__'):
+            if hasattr(c, "__annotations__"):
                 valid_fields.update(c.__annotations__.keys())
 
         # Filter the input data to only include valid fields
@@ -139,72 +139,142 @@ class Image:
 
     def draw(self) -> PILImage.Image:
         """
-        Draw annotations on the image.
-
-        Returns:
-            PILImage.Image: The image with drawn annotations.
+        Draw annotations on the image with:
+        - Segmentation: semi-transparent fill
+        - Detection: dotted border only (no fill)
         """
         img = PILImage.open(self.path)
-        # Convert to RGB mode to ensure color compatibility
-        img = img.convert('RGB')
-        draw = ImageDraw.Draw(img)
+        img = img.convert("RGB")
+        overlay = PILImage.new("RGBA", img.size, (0, 0, 0, 0))
+        draw = ImageDraw.Draw(overlay)
         width, height = img.size
-        category_colors = {}
-        # Change yellow text color to string format
-        text_color = '#FFFF00'  # yellow for text
 
         for annotation in self.annotations:
-            if annotation.category_name not in category_colors:
-                rgb_color = generate_random_color()
-                # Convert RGB tuple to hex string format
-                category_colors[annotation.category_name] = '#{:02x}{:02x}{:02x}'.format(*rgb_color)
+            # Generate color similar to web version
+            hue = (annotation.category_id * 137.508) % 360
+            h = hue / 360
+            rgb_color = self._hsl_to_rgb(h, 0.7, 0.5)
 
-            color = category_colors[annotation.category_name]
+            if annotation.task == "segment" and annotation.segmentation:
+                # Segmentation gets fill and outline
+                fill_color = (*rgb_color, 51)  # 20% opacity
+                stroke_color = (*rgb_color, 25)  # 10% opacity
 
-            if annotation.task == "detect" and annotation.bbox:
-                x1, y1, x2, y2 = annotation.bbox
-                abs_x1 = int(x1 * width)
-                abs_y1 = int(y1 * height)
-                abs_x2 = int(x2 * width)
-                abs_y2 = int(y2 * height)
-                if all(x >= 0 for x in [abs_x1, abs_y1, abs_x2, abs_y2]):
-                    draw.rectangle([abs_x1, abs_y1, abs_x2, abs_y2], outline=color, width=2)
-
-            if annotation.task in ["segment", "obb"] and annotation.segmentation:
                 abs_segmentation = relative_to_absolute_coords(
                     annotation.segmentation, width, height
                 )
                 points = list(zip(abs_segmentation[0::2], abs_segmentation[1::2]))
-                draw.polygon(points, outline=color, width=3)
+                draw.polygon(points, fill=fill_color, outline=stroke_color)
 
-            if annotation.center:
-                cx, cy = annotation.center
-                abs_cx = int(cx * width)
-                abs_cy = int(cy * height)
-                radius = 3
-                draw.ellipse(
-                    [abs_cx - radius, abs_cy - radius, abs_cx + radius, abs_cy + radius], fill=color
-                )
+            elif annotation.task == "detect" and annotation.bbox:
+                # Detection gets only dotted outline, no fill
+                stroke_color = (*rgb_color, 255)  # Full opacity for border
+                x1, y1, x2, y2 = annotation.bbox
+                abs_coords = [int(x1 * width), int(y1 * height), int(x2 * width), int(y2 * height)]
 
+                # Draw dotted rectangle (manually since PIL doesn't support dotted lines)
+                dash_length = 5
+                for i in range(0, int(x2 * width - x1 * width), dash_length * 2):
+                    # Top line
+                    draw.line(
+                        [
+                            abs_coords[0] + i,
+                            abs_coords[1],
+                            min(abs_coords[0] + i + dash_length, abs_coords[2]),
+                            abs_coords[1],
+                        ],
+                        fill=stroke_color,
+                    )
+                    # Bottom line
+                    draw.line(
+                        [
+                            abs_coords[0] + i,
+                            abs_coords[3],
+                            min(abs_coords[0] + i + dash_length, abs_coords[2]),
+                            abs_coords[3],
+                        ],
+                        fill=stroke_color,
+                    )
+
+                for i in range(0, int(y2 * height - y1 * height), dash_length * 2):
+                    # Left line
+                    draw.line(
+                        [
+                            abs_coords[0],
+                            abs_coords[1] + i,
+                            abs_coords[0],
+                            min(abs_coords[1] + i + dash_length, abs_coords[3]),
+                        ],
+                        fill=stroke_color,
+                    )
+                    # Right line
+                    draw.line(
+                        [
+                            abs_coords[2],
+                            abs_coords[1] + i,
+                            abs_coords[2],
+                            min(abs_coords[1] + i + dash_length, abs_coords[3]),
+                        ],
+                        fill=stroke_color,
+                    )
+
+            # Draw text with background
             if annotation.category_name:
                 if annotation.bbox:
-                    label_position = (
-                        int(annotation.bbox[0] * width),
-                        int(annotation.bbox[1] * height) - 15,
-                    )
-                elif annotation.center:
-                    label_position = (
-                        int(annotation.center[0] * width),
-                        int(annotation.center[1] * height),
-                    )
+                    text_x = int(annotation.bbox[0] * width)
+                    text_y = int(annotation.bbox[1] * height) - 15
+                elif annotation.segmentation:
+                    # Calculate text position for segmentation
+                    x_coords = annotation.segmentation[0::2]
+                    y_coords = annotation.segmentation[1::2]
+                    text_x = int(min(x_coords) * width)
+                    text_y = int(min(y_coords) * height) - 15
                 else:
                     continue
+
                 text = annotation.category_name
                 if annotation.conf >= 0:
-                    text = f"{annotation.category_name} ({annotation.conf:.2f})"
-                draw.text(label_position, text, fill=text_color)
+                    text += f" ({int(annotation.conf * 100)}%)"
 
-        return img
+                # Draw text background
+                text_bbox = draw.textbbox((text_x, text_y), text)
+                draw.rectangle(text_bbox, fill=(0, 0, 0, 178))  # 70% opacity black
+                draw.text((text_x, text_y), text, fill=(255, 255, 255, 255))
+
+        # Composite the transparent overlay onto the original image
+        img = PILImage.alpha_composite(img.convert("RGBA"), overlay)
+        return img.convert("RGB")
+
+    def _hsl_to_rgb(self, h, s, l):
+        """
+        Convert HSL to RGB color.
+        h, s, l values are in range [0, 1]
+        Returns RGB values in range [0, 255]
+        """
+
+        def hue_to_rgb(p, q, t):
+            if t < 0:
+                t += 1
+            if t > 1:
+                t -= 1
+            if t < 1 / 6:
+                return p + (q - p) * 6 * t
+            if t < 1 / 2:
+                return q
+            if t < 2 / 3:
+                return p + (q - p) * (2 / 3 - t) * 6
+            return p
+
+        if s == 0:
+            r = g = b = l
+        else:
+            q = l * (1 + s) if l < 0.5 else l + s - l * s
+            p = 2 * l - q
+            r = hue_to_rgb(p, q, h + 1 / 3)
+            g = hue_to_rgb(p, q, h)
+            b = hue_to_rgb(p, q, h - 1 / 3)
+
+        return (int(r * 255), int(g * 255), int(b * 255))
 
     def dict(self) -> Dict[str, Any]:
         """Convert the image to a dictionary, including annotations."""
@@ -226,7 +296,7 @@ class Image:
 
         valid_fields = set()
         for c in cls.__mro__:
-            if hasattr(c, '__annotations__'):
+            if hasattr(c, "__annotations__"):
                 valid_fields.update(c.__annotations__.keys())
 
         filtered_data = {k: v for k, v in data.items() if k in valid_fields}
@@ -261,7 +331,7 @@ class Dataset:
 
         valid_fields = set()
         for c in cls.__mro__:
-            if hasattr(c, '__annotations__'):
+            if hasattr(c, "__annotations__"):
                 valid_fields.update(c.__annotations__.keys())
 
         filtered_data = {k: v for k, v in data.items() if k in valid_fields}

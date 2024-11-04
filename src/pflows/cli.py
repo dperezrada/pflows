@@ -11,6 +11,7 @@ from pflows.workflow import run_workflow
 from compare_models import compare_models, show_model_details
 from pflows.viewer.review_images import main as review_main
 from train_remote import main as train_main
+from run_model import run_and_compare
 
 
 load_dotenv(".env")
@@ -106,6 +107,15 @@ def main():
         help="Sort class results by metric",
     )
 
+    # Parser for the 'run_model' command
+    run_model_parser = subparsers.add_parser("run_model", help="Run YOLO model and compare with gold standard")
+    run_model_parser.add_argument("model_path", help="Path to YOLO model (.pt file)")
+    run_model_parser.add_argument("dataset_path", help="Path to YOLO dataset folder")
+    run_model_parser.add_argument("--groups", nargs="+", help="Groups to evaluate (e.g. train val)")
+    run_model_parser.add_argument("--threshold", type=float, default=0.5, help="Confidence threshold")
+    run_model_parser.add_argument("--iou-threshold", type=float, default=0.5, help="IoU threshold")
+    run_model_parser.add_argument("--output", help="Path to save metrics JSON file")
+
     args = parser.parse_args()
 
     if args.command == "run":
@@ -122,6 +132,28 @@ def main():
     elif args.command == "detail":
         result = show_model_details(args.model_path, args.format, args.sort)
         print(result)
+    elif args.command == "run_model":
+        metrics = run_and_compare(
+            args.model_path,
+            args.dataset_path,
+            args.groups,
+            args.threshold,
+            args.iou_threshold,
+            args.output,
+        )
+        
+        # Print summary metrics
+        print("\nOverall Metrics:")
+        print(f"Precision: {metrics['overall']['precision']:.4f}")
+        print(f"Recall: {metrics['overall']['recall']:.4f}")
+        print(f"F1 Score: {metrics['overall']['f1_score']:.4f}")
+
+        print("\nMetrics by Category:")
+        for category, cat_metrics in metrics["categories"].items():
+            print(f"\n{category}:")
+            print(f"  Precision: {cat_metrics['precision']:.4f}")
+            print(f"  Recall: {cat_metrics['recall']:.4f}")
+            print(f"  F1 Score: {cat_metrics['f1_score']:.4f}")
     else:
         parser.print_help()
 

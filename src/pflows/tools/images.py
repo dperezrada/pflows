@@ -24,7 +24,7 @@ from pflows.typedef import Annotation, Dataset, Image
 
 # TODO: refactor this function
 # pylint: disable=too-many-locals
-def crop_to_annotations(dataset: Dataset, tag = None) -> Dataset:
+def crop_to_annotations(dataset: Dataset, tag=None) -> Dataset:
     """
     Crop images to match the min and max x/y of the annotations.
     """
@@ -596,4 +596,8 @@ def write_image_with_annotations(image: Image, target_image_path: str | None = N
 
 
 def remove_all_annotations(dataset: Dataset) -> Dataset:
-    return Dataset(images=[Image(**asdict(image), annotations=[]) for image in dataset.images], categories=dataset.categories, groups=dataset.groups)
+    return Dataset(
+        images=[Image(**{**asdict(image), "annotations": []}) for image in dataset.images],
+        categories=dataset.categories,
+        groups=dataset.groups,
+    )

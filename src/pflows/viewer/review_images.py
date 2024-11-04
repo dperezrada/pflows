@@ -106,9 +106,31 @@ def load_classes(image_path):
             classes_file = open(f"{yaml_dir}/../classes.txt", "r")
             return classes_file.read().splitlines()
         except:
-            print(f"{yaml_dir}/../../classes.txt")
-            classes_file = open(f"{yaml_dir}/../../classes.txt", "r")
-            return classes_file.read().splitlines()
+            try:
+                print(f"{yaml_dir}/../../classes.txt")
+                classes_file = open(f"{yaml_dir}/../../classes.txt", "r")
+                return classes_file.read().splitlines()
+            except:
+                return []
+
+
+def get_label_path(image_path):
+    label_path = image_path.replace(".jpg", ".txt").replace("/images/", "/labels/")
+    confidence_path = image_path.replace(".jpg", ".txt").replace("/images/", "/confidences/")
+    if os.path.exists(label_path):
+        if confidence_path == image_path or confidence_path == label_path:
+            confidence_path = None
+        return label_path, confidence_path
+    label_path = image_path.replace(".jpg", ".txt")
+    if os.path.exists(label_path):
+        return label_path, None
+    raise Exception("No label path found")
+
+
+def get_color(classes, colors, class_id):
+    if isinstance(classes, dict):
+        return colors[classes[class_id]]
+    return colors[class_id]
 
 
 def load_image(image_path, selected_category, legend_image, classes, colors, initial=False):
@@ -116,10 +138,7 @@ def load_image(image_path, selected_category, legend_image, classes, colors, ini
         print("image_path", image_path)
     original_image_path = load_original_image(image_path)
 
-    label_path = image_path.replace(".jpg", ".txt").replace("/images/", "/labels/")
-    confidence_path = image_path.replace(".jpg", ".txt").replace("/images/", "/confidences/")
-    if confidence_path == image_path or confidence_path == label_path:
-        confidence_path = None
+    label_path, confidence_path = get_label_path(image_path)
     info_path = image_path.replace(".jpg", ".json").replace("/images/", "/info/")
     if info_path and info_path != image_path and os.path.exists(info_path):
         info = json.loads(open(info_path, "r").read())
@@ -132,9 +151,17 @@ def load_image(image_path, selected_category, legend_image, classes, colors, ini
 
     # read yolo output open the file and split spaces in each line
     yolo_output = []
+    category_ids = set()
+
     with open(label_path, "r") as file:
         for line in file:
             yolo_output.append([float(x) for x in line.split(" ")])
+            category_ids.add(line.split(" ")[0])
+    if not classes:
+        classes = dict(
+            [(int(category_id), index) for index, category_id in enumerate(list(category_ids))]
+        )
+        colors = load_colors(classes.values())
 
     yaml_dir = image_path.split("/images/")[0]
     if yaml_dir == image_path:
@@ -164,7 +191,13 @@ def load_image(image_path, selected_category, legend_image, classes, colors, ini
             points = np.array(points).reshape(-1, 2)
             points = points * np.array([image.shape[1], image.shape[0]])
             points = points.astype(int)
-            cv2.polylines(image, [points], isClosed=True, color=colors[class_id], thickness=2)
+            cv2.polylines(
+                image,
+                [points],
+                isClosed=True,
+                color=get_color(classes, colors, class_id),
+                thickness=2,
+            )
             # get left, top, right, bottom
             left = np.min(points[:, 0])
             top = np.min(points[:, 1])
@@ -182,7 +215,7 @@ def load_image(image_path, selected_category, legend_image, classes, colors, ini
             bottom = int((center_y + height / 2) * img_height)
 
             # Draw the bounding box on the image
-            cv2.rectangle(image, (left, top), (right, bottom), colors[class_id])
+            cv2.rectangle(image, (left, top), (right, bottom), get_color(classes, colors, class_id))
 
         # Optionally, you can add text to label the object with its class ID
         label = str(classes[int(class_id)])

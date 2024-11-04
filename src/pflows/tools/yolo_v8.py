@@ -733,12 +733,14 @@ def train(
         "model_output": model_output,
     }
 
+
 def find_data_yaml_folder(temp_dir: str) -> str | None:
     for root, _, files in os.walk(temp_dir):
         for file in files:
             if file.endswith("data.yaml"):
                 return root
     return None
+
 
 def load_from_zip(zip_path: str, temp_dir: str | None = None) -> Dataset:
     if temp_dir is None:

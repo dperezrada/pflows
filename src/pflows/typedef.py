@@ -233,14 +233,17 @@ class Image:
                 h = hue / 360
                 rgb_color = self._hsl_to_rgb(h, 0.7, 0.5)
 
+                # Calculate the center point for text placement
                 if annotation.bbox:
-                    text_x = int(annotation.bbox[0] * width)
-                    text_y = int(annotation.bbox[1] * height) - font_size - 5
+                    # Place text at the center-top of the bbox
+                    text_x = int((annotation.bbox[0] + annotation.bbox[2]) * width / 2)
+                    text_y = int(annotation.bbox[1] * height) - font_size - 2
                 elif annotation.segmentation:
+                    # Calculate centroid of the segmentation polygon
                     x_coords = annotation.segmentation[0::2]
                     y_coords = annotation.segmentation[1::2]
-                    text_x = int(min(x_coords) * width)
-                    text_y = int(min(y_coords) * height) - font_size - 5
+                    text_x = int(sum(x_coords) / len(x_coords) * width)
+                    text_y = int(min(y_coords) * height) - font_size - 2
                 else:
                     continue
 
@@ -253,8 +256,15 @@ class Image:
                 text_width = text_bbox[2] - text_bbox[0]
                 text_height = text_bbox[3] - text_bbox[1]
 
-                # Check for overlaps in the region of the text
-                x_range = range(max(0, text_x - text_width), min(width, text_x + text_width))
+                # Center the text horizontally
+                text_x -= text_width // 2
+
+                # Ensure text stays within image bounds
+                text_x = max(0, min(text_x, width - text_width))
+                text_y = max(0, text_y)
+
+                # Check for overlaps in a smaller region around the text
+                x_range = range(max(0, text_x), min(width, text_x + text_width))
 
                 # Find all y positions used in this x range
                 used_y_positions = set()
@@ -262,9 +272,13 @@ class Image:
                     if x in used_positions:
                         used_y_positions.update(used_positions[x])
 
-                # Find the first available y position that doesn't overlap
-                while any(abs(text_y - used_y) < text_height + 5 for used_y in used_y_positions):
-                    text_y += text_height + 5
+                # Find the closest non-overlapping position
+                original_y = text_y
+                while any(abs(text_y - used_y) < text_height + 2 for used_y in used_y_positions):
+                    if text_y < original_y:
+                        text_y = original_y + (original_y - text_y) + text_height + 2
+                    else:
+                        text_y += text_height + 2
 
                 # Record the used position
                 for x in x_range:

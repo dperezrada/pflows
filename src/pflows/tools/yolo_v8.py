@@ -7,6 +7,7 @@ import shutil
 import tempfile
 from typing import List, Tuple, Callable, Any, Dict
 import zipfile
+from multiprocessing import Pool, cpu_count
 
 import torch
 import yaml
@@ -513,6 +514,25 @@ def annotations_non_max_suppression(
     return keep_annotations
 
 
+def process_image(args):
+    image, model_path, threshold, segment_tolerance, add_tag, non_max_suppression, non_max_suppression_threshold, model_names_keys = args
+    model = YOLO(model_path)
+    model_annotations = run_model_on_image(
+        image.path,
+        model,
+        threshold=threshold,
+        segment_tolerance=segment_tolerance,
+        add_tag=add_tag,
+    )
+    keep_annotations = annotations_non_max_suppression(
+        model_annotations,
+        model_names_keys,
+        iou_threshold=non_max_suppression_threshold,
+        active=non_max_suppression,
+    )
+    return keep_annotations
+
+
 def run_model(
     dataset: Dataset,
     model_path: str,
@@ -521,6 +541,8 @@ def run_model(
     segment_tolerance: float = 0.02,
     non_max_suppression: bool = True,
     non_max_suppression_threshold: float = 0.4,
+    parallel: bool = False,
+    num_processes: int | None = None,
 ) -> Dataset:
     model = YOLO(model_path)
     model_names_keys = get_model_category_ids(model)
@@ -531,29 +553,63 @@ def run_model(
     ]
     print("New categories found: ", new_categories)
     total_images = len(dataset.images)
-    for index, image in enumerate(dataset.images):
-        model_annotations = run_model_on_image(
-            image.path,
-            model,
-            threshold=threshold,
-            segment_tolerance=segment_tolerance,
-            add_tag=add_tag,
-        )
-        keep_annotations = annotations_non_max_suppression(
-            model_annotations,
-            model_names_keys,
-            iou_threshold=non_max_suppression_threshold,
-            active=non_max_suppression,
-        )
 
-        image.annotations = image.annotations + keep_annotations
-        if index % 25 == 0:
-            progress_percentage = round((index / total_images) * 100, 2)
-            print()
-            print("-" * 50)
-            print(f"Progress: {progress_percentage}%")
-            print("-" * 50)
-            print()
+    if parallel:
+        # Prepare arguments for parallel processing
+        args_list = [
+            (
+                image,
+                model_path,
+                threshold,
+                segment_tolerance,
+                add_tag,
+                non_max_suppression,
+                non_max_suppression_threshold,
+                model_names_keys,
+            )
+            for image in dataset.images
+        ]
+
+        if num_processes is None:
+            num_processes = cpu_count() - 1
+
+        # Create process pool and process images in parallel
+        with Pool(processes=num_processes) as pool:
+            results = []
+            for i, keep_annotations in enumerate(pool.imap_unordered(process_image, args_list)):
+                dataset.images[i].annotations = dataset.images[i].annotations + keep_annotations
+                if i % 25 == 0:
+                    progress_percentage = round((i / total_images) * 100, 2)
+                    print()
+                    print("-" * 50)
+                    print(f"Progress: {progress_percentage}%")
+                    print("-" * 50)
+                    print()
+    else:
+        # Original sequential processing
+        for index, image in enumerate(dataset.images):
+            model_annotations = run_model_on_image(
+                image.path,
+                model,
+                threshold=threshold,
+                segment_tolerance=segment_tolerance,
+                add_tag=add_tag,
+            )
+            keep_annotations = annotations_non_max_suppression(
+                model_annotations,
+                model_names_keys,
+                iou_threshold=non_max_suppression_threshold,
+                active=non_max_suppression,
+            )
+
+            image.annotations = image.annotations + keep_annotations
+            if index % 25 == 0:
+                progress_percentage = round((index / total_images) * 100, 2)
+                print()
+                print("-" * 50)
+                print(f"Progress: {progress_percentage}%")
+                print("-" * 50)
+                print()
 
     dataset.categories = [
         Category(name=name, id=index) for index, name in enumerate(new_categories)

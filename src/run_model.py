@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Dict, Any, List
 import json
-
+import tempfile
 from pflows.tools.yolo_v8 import load_dataset, run_model
 from pflows.tools.compare_datasets import compare_images_annotations
 from pflows.tools.filter_images import by_group, by_groups
@@ -101,9 +101,13 @@ if __name__ == "__main__":
 
     # Print summary metrics
     print("\nOverall Metrics:")
+    print(f"Total Annotations: {metrics['overall']['TP'] + metrics['overall']['FP'] + metrics['overall']['FN']}")
     print(f"Precision: {metrics['overall']['precision']:.4f}")
     print(f"Recall: {metrics['overall']['recall']:.4f}")
     print(f"F1 Score: {metrics['overall']['f1_score']:.4f}")
+    print(f"True Positives: {metrics['overall']['TP']}")
+    print(f"False Positives: {metrics['overall']['FP']}")
+    print(f"False Negatives: {metrics['overall']['FN']}")
 
     print("\nMetrics by Category:")
     for category, cat_metrics in metrics["categories"].items():
@@ -111,3 +115,27 @@ if __name__ == "__main__":
         print(f"  Precision: {cat_metrics['precision']:.4f}")
         print(f"  Recall: {cat_metrics['recall']:.4f}")
         print(f"  F1 Score: {cat_metrics['f1_score']:.4f}")
+        print(f"  True Positives: {cat_metrics['TP']}")
+        print(f"  False Positives: {cat_metrics['FP']}")
+        print(f"  False Negatives: {cat_metrics['FN']}")
+        print(f"  Total Annotations: {cat_metrics['TP'] + cat_metrics['FP'] + cat_metrics['FN']}")
+
+    # Create a temporary file and store the metrics in tsv format
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".tsv", mode="w", encoding="utf-8") as f:
+        tsv_path = f.name
+        print(f"Metrics saved to temporary file: {tsv_path}")
+        # write the header
+        f.write("category\ttotal_annotations\tprecision\trecall\tf1_score\tTP\tFP\tFN\n")
+        total_annotations = metrics['overall']['TP'] + metrics['overall']['FP'] + metrics['overall']['FN']
+        f.write(
+            f"Overall\t{total_annotations}\t{metrics['overall']['precision']:.4f}\t"
+            f"{metrics['overall']['recall']:.4f}\t{metrics['overall']['f1_score']:.4f}\t"
+            f"{metrics['overall']['TP']}\t{metrics['overall']['FP']}\t{metrics['overall']['FN']}\n"
+        )
+        for category, cat_metrics in metrics["categories"].items():
+            category_total = cat_metrics['TP'] + cat_metrics['FP'] + cat_metrics['FN']
+            f.write(
+                f"{category}\t{category_total}\t{cat_metrics['precision']:.4f}\t"
+                f"{cat_metrics['recall']:.4f}\t{cat_metrics['f1_score']:.4f}\t{cat_metrics['TP']}\t"
+                f"{cat_metrics['FP']}\t{cat_metrics['FN']}\n"
+            )

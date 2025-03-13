@@ -76,12 +76,22 @@ def prepare_workflow(
             workflow_functions[f"task_{index}"] = task["function"]
             task["function"] = "run_function_path"
 
+    # Deal with the model_path option possible as a path or as a YOLO object
+    yolo_model_objects = {}
+    for index, task in enumerate(workflow_tasks):
+        print(task)
+        if task.get("model_path") and not isinstance(task["model_path"], str):
+            yolo_model_objects[f"task_{index}"] = task["model_path"]
+            task["model_path"] = "run_yolo_model_path"
+
     workflow_text = json.dumps(workflow_tasks)
     workflow_text = replace_variables(workflow_text, workflow_dir)
     workflow = cast(Sequence[Dict[str, Any]], json.loads(workflow_text))
     for index, task in enumerate(workflow):
         if task.get("function"):
             task["function"] = workflow_functions[f"task_{index}"]
+        if task.get("model_path") and task["model_path"] == "run_yolo_model_path":
+            task["model_path"] = yolo_model_objects[f"task_{index}"]
     return workflow
 
 

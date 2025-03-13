@@ -12,6 +12,7 @@ from compare_models import compare_models, show_model_details
 from pflows.viewer.review_images import main as review_main
 from train_remote import main as train_main
 from run_model import run_and_compare
+from compare_dataset_with_standard import compare_datasets
 
 
 load_dotenv(".env")
@@ -120,6 +121,24 @@ def main():
     run_model_parser.add_argument("--iou-threshold", type=float, default=0.5, help="IoU threshold")
     run_model_parser.add_argument("--output", help="Path to save metrics JSON file")
 
+    # Parser for the 'compare_datasets' command
+    compare_datasets_parser = subparsers.add_parser(
+        "compare_datasets", help="Compare annotations between two YOLO datasets"
+    )
+    compare_datasets_parser.add_argument(
+        "dataset_path_1", help="Path to first YOLO dataset folder (gold standard)"
+    )
+    compare_datasets_parser.add_argument(
+        "dataset_path_2", help="Path to second YOLO dataset folder"
+    )
+    compare_datasets_parser.add_argument(
+        "--groups", nargs="+", help="Groups to evaluate (e.g. train val)"
+    )
+    compare_datasets_parser.add_argument(
+        "--iou-threshold", type=float, default=0.5, help="IoU threshold"
+    )
+    compare_datasets_parser.add_argument("--output", help="Path to save metrics JSON file")
+
     args = parser.parse_args()
 
     if args.command == "run":
@@ -142,6 +161,27 @@ def main():
             args.dataset_path,
             args.groups,
             args.threshold,
+            args.iou_threshold,
+            args.output,
+        )
+
+        # Print summary metrics
+        print("\nOverall Metrics:")
+        print(f"Precision: {metrics['overall']['precision']:.4f}")
+        print(f"Recall: {metrics['overall']['recall']:.4f}")
+        print(f"F1 Score: {metrics['overall']['f1_score']:.4f}")
+
+        print("\nMetrics by Category:")
+        for category, cat_metrics in metrics["categories"].items():
+            print(f"\n{category}:")
+            print(f"  Precision: {cat_metrics['precision']:.4f}")
+            print(f"  Recall: {cat_metrics['recall']:.4f}")
+            print(f"  F1 Score: {cat_metrics['f1_score']:.4f}")
+    elif args.command == "compare_datasets":
+        metrics = compare_datasets(
+            args.dataset_path_1,
+            args.dataset_path_2,
+            args.groups,
             args.iou_threshold,
             args.output,
         )

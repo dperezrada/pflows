@@ -515,7 +515,16 @@ def annotations_non_max_suppression(
 
 
 def process_image(args):
-    image, model_path, threshold, segment_tolerance, add_tag, non_max_suppression, non_max_suppression_threshold, model_names_keys = args
+    (
+        image,
+        model_path,
+        threshold,
+        segment_tolerance,
+        add_tag,
+        non_max_suppression,
+        non_max_suppression_threshold,
+        model_names_keys,
+    ) = args
     model = YOLO(model_path)
     model_annotations = run_model_on_image(
         image.path,
@@ -535,7 +544,7 @@ def process_image(args):
 
 def run_model(
     dataset: Dataset,
-    model_path: str,
+    model_path: str | YOLO,
     add_tag: str | None = None,
     threshold: float = 0.5,
     segment_tolerance: float = 0.02,
@@ -544,7 +553,10 @@ def run_model(
     parallel: bool = False,
     num_processes: int | None = None,
 ) -> Dataset:
-    model = YOLO(model_path)
+    if isinstance(model_path, str):
+        model = YOLO(model_path)
+    else:
+        model = model_path
     model_names_keys = get_model_category_ids(model)
     model_names = [model.names[key] for key in sorted(model_names_keys)]
     current_category_names = [category.name for category in dataset.categories]

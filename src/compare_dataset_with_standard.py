@@ -2,7 +2,6 @@ from pathlib import Path
 from typing import Dict, Any, List
 import json
 import tempfile
-from ultralytics import YOLO
 from pflows.tools.yolo_v8 import load_dataset, run_model
 from pflows.tools.compare_datasets import compare_images_annotations
 from pflows.tools.filter_images import by_group, by_groups
@@ -10,67 +9,45 @@ from pflows.typedef import Dataset, Image
 from pflows.tools.external import run_function_path
 
 
-def run_and_compare(
-    model_path: str | YOLO,
-    dataset_path: str,
+def compare_datasets(
+    dataset_path_1: str,
+    dataset_path_2: str,
     groups: str | List[str] | None = None,
-    threshold: float = 0.5,
     iou_threshold: float = 0.5,
     output_metrics: str | None = None,
-    function_name: str = "run_model",
 ) -> Dict[str, Any]:
     """
-    Run YOLO model on images and compare with gold standard annotations.
+    Compare two YOLO datasets.
 
     Args:
-        model_path: Path to the YOLO model (.pt file)
-        dataset_path: Path to the YOLO dataset folder
+        dataset_path_1: Path to the first YOLO dataset folder (treated as gold standard)
+        dataset_path_2: Path to the second YOLO dataset folder
         groups: Single group name or list of group names to filter by (e.g. "train", ["train", "val"])
-        threshold: Confidence threshold for model predictions
-        iou_threshold: IoU threshold for matching predictions with ground truth
+        iou_threshold: IoU threshold for matching annotations
         output_metrics: Optional path to save metrics JSON file
 
     Returns:
         Dictionary containing comparison metrics
     """
-    # Load gold standard dataset
-    gold_dataset = load_dataset(None, dataset_path)
+    # Load both datasets
+    dataset_1 = load_dataset(None, dataset_path_1)
+    dataset_2 = load_dataset(None, dataset_path_2)
 
     # Filter by groups if specified
     if groups is not None:
         if isinstance(groups, str):
-            gold_dataset = by_group(gold_dataset, groups)
+            dataset_1 = by_group(dataset_1, groups)
+            dataset_2 = by_group(dataset_2, groups)
         else:
-            gold_dataset = by_groups(gold_dataset, groups)
+            dataset_1 = by_groups(dataset_1, groups)
+            dataset_2 = by_groups(dataset_2, groups)
 
-    new_dataset_to_infer = Dataset(
-        images=[
-            Image(**{**image.copy().__dict__, "annotations": []}) for image in gold_dataset.images
-        ],
-        categories=gold_dataset.categories,
-        groups=gold_dataset.groups,
-    )
-    # Run model on images
-    if model_path.endswith(".pt"):
-        inferred_dataset = run_model(
-            dataset=new_dataset_to_infer,
-            model_path=model_path,
-            threshold=threshold,
-            add_tag="inference",
-        )
-    elif model_path.endswith(".py"):
-        inferred_dataset = run_function_path(
-            dataset=new_dataset_to_infer,
-            file_path=model_path,
-            function_name=function_name,
-        )
-
-    # Get category names from gold dataset
-    category_names = [category.name for category in gold_dataset.categories]
+    # Get category names from first dataset
+    category_names = [category.name for category in dataset_1.categories]
 
     # Compare results
     metrics = compare_images_annotations(
-        gold_dataset.images, inferred_dataset.images, category_names, iou_threshold=iou_threshold
+        dataset_1.images, dataset_2.images, category_names, iou_threshold=iou_threshold
     )
 
     if output_metrics:
@@ -89,21 +66,19 @@ def run_and_compare(
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="Run YOLO model and compare with gold standard")
-    parser.add_argument("model_path", help="Path to YOLO model (.pt file)")
-    parser.add_argument("dataset_path", help="Path to YOLO dataset folder")
+    parser = argparse.ArgumentParser(description="Compare two YOLO datasets")
+    parser.add_argument("dataset_path_1", help="Path to first YOLO dataset folder (gold standard)")
+    parser.add_argument("dataset_path_2", help="Path to second YOLO dataset folder")
     parser.add_argument("--groups", nargs="+", help="Groups to evaluate (e.g. train val)")
-    parser.add_argument("--threshold", type=float, default=0.5, help="Confidence threshold")
     parser.add_argument("--iou-threshold", type=float, default=0.5, help="IoU threshold")
     parser.add_argument("--output", help="Path to save metrics JSON file")
 
     args = parser.parse_args()
 
-    metrics = run_and_compare(
-        args.model_path,
-        args.dataset_path,
+    metrics = compare_datasets(
+        args.dataset_path_1,
+        args.dataset_path_2,
         args.groups,
-        args.threshold,
         args.iou_threshold,
         args.output,
     )
